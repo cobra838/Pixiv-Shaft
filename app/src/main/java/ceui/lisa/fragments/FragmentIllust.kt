@@ -117,8 +117,14 @@ class FragmentIllust : SwipeFragment<FragmentIllustBinding>() {
         // and block ViewPager's horizontal swipe (observed on Android 16 +
         // tablet devices).
         val layout = smartRefreshLayout ?: return
+        layout.setRefreshHeader(getHeader())
+        layout.setRefreshFooter(getFooter())
         layout.setEnableRefresh(false)
         layout.setEnableLoadMore(false)
+        layout.setEnablePureScrollMode(true)
+        layout.setEnableOverScrollDrag(true)
+        layout.setEnableOverScrollBounce(true)
+        layout.setEnableNestedScroll(false)
     }
 
     override fun initView() {
@@ -541,6 +547,7 @@ class FragmentIllust : SwipeFragment<FragmentIllustBinding>() {
                         }
                     })
                 }
+                baseBind.recyclerView.isNestedScrollingEnabled = false
                 recyHeight = baseBind.recyclerView.height
                 // 上面的高度测算每次都要跑(简介补拉到货后 sheet 要重新长高),但图片区不能跟着重建:
                 // 换 layoutManager + new adapter = 所有大图从零重新加载,这就是收藏一下整页闪一次的原因(#962)。
