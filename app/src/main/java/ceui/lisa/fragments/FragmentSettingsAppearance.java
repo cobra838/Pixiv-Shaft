@@ -112,6 +112,19 @@ public class FragmentSettingsAppearance extends SettingsPageFragment<FragmentSet
                     .show();
         });
 
+        // 全局滑动返回
+        baseBind.globalSwipeBack.setChecked(Shaft.sSettings.isGlobalSwipeBack());
+        baseBind.globalSwipeBack.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                Shaft.sSettings.setGlobalSwipeBack(isChecked);
+                Common.showToast(getString(R.string.please_restart_app));
+                Local.setSettings(Shaft.sSettings);
+            }
+        });
+        baseBind.globalSwipeBackRela.setOnClickListener(v ->
+                baseBind.globalSwipeBack.performClick());
+
         // 列数
         baseBind.lineCount.setText(getString(R.string.string_349, Shaft.sSettings.getLineCount()));
         baseBind.lineCountRela.setOnClickListener(v -> {

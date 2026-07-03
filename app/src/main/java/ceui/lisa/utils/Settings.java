@@ -294,6 +294,8 @@ public class Settings {
 
     private String navigationInitPosition = NavigationLocationHelper.TUIJIAN; // 主页底部导航栏初始化位置
 
+    private boolean globalSwipeBack = true; // 全局滑动返回
+
 //    private boolean isDownloadOnlyUseWiFi = false; // 仅通过 Wifi 下载
 
     private int downloadLimitType = 0; // 下载限制类型 0:无限制 1:仅Wifi下自动下载 2:不自动下载
@@ -823,6 +825,14 @@ public class Settings {
 
     public void setShowRelatedWhenStar(boolean showRelatedWhenStar) {
         this.showRelatedWhenStar = showRelatedWhenStar;
+    }
+
+    public boolean isGlobalSwipeBack() {
+        return globalSwipeBack;
+    }
+
+    public void setGlobalSwipeBack(boolean globalSwipeBack) {
+        this.globalSwipeBack = globalSwipeBack;
     }
 
     public boolean isIllustLongPressDownload() {

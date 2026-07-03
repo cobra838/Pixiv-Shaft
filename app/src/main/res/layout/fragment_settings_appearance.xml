@@ -135,6 +135,24 @@
                 </RelativeLayout>
 
                 <RelativeLayout
+                    android:id="@+id/global_swipe_back_rela"
+                    style="@style/M3SetRow"
+                    android:background="@drawable/bg_m3_row_mid">
+
+                    <LinearLayout style="@style/M3SetTexts">
+
+                        <TextView
+                            style="@style/M3SetTitle"
+                            android:text="@string/string_397" />
+                    </LinearLayout>
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/global_swipe_back"
+                        style="@style/M3SetSwitch" />
+
+                </RelativeLayout>
+
+                <RelativeLayout
                     android:id="@+id/bottom_bar_order_rela"
                     style="@style/M3SetRow"
                     android:background="@drawable/bg_m3_row_mid">
