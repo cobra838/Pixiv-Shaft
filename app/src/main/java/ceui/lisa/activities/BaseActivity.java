@@ -13,7 +13,9 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Looper;
 import android.text.TextUtils;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 
 import androidx.activity.EdgeToEdge;
 import androidx.activity.SystemBarStyle;
@@ -47,6 +49,14 @@ public abstract class BaseActivity<Layout extends ViewDataBinding> extends AppCo
     public static final int ASK_URI = 42;
     private FeedBack mFeedBack;
 
+    private float edgeSwipeDownX;
+    private float edgeSwipeDownY;
+    private boolean edgeSwipeTracking;
+    private boolean edgeSwipeTriggered;
+    private int edgeSwipeTouchSlop;
+    private int edgeSwipeStartWidth;
+    private int edgeSwipeTriggerDistance;
+
     /**
      * 把 MMKV 里持久化的 locale tag 转成 Configuration 包到 base context 上。
      * 这是「FragmentLogin 选完语言不 recreate、直接 startActivity 进下一页」也能正确显示语言的根。
@@ -68,6 +78,7 @@ public abstract class BaseActivity<Layout extends ViewDataBinding> extends AppCo
 
             mContext = this;
             mActivity = this;
+            initEdgeSwipeBackConfig();
 
             Intent intent = getIntent();
             if (intent != null) {
@@ -109,6 +120,64 @@ public abstract class BaseActivity<Layout extends ViewDataBinding> extends AppCo
             e.printStackTrace();
         }
     }
+
+    // SwipeBack implementation
+    private void initEdgeSwipeBackConfig() {
+        float density = getResources().getDisplayMetrics().density;
+        edgeSwipeTouchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
+        edgeSwipeStartWidth = Math.max(edgeSwipeTouchSlop * 2, (int) (24f * density));
+        edgeSwipeTriggerDistance = Math.max(edgeSwipeTouchSlop * 6, (int) (72f * density));
+    }
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (handleGlobalSwipeBackGesture(ev)) {
+            return true;
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+    private boolean handleGlobalSwipeBackGesture(MotionEvent ev) {
+        if (!isGlobalSwipeBackGestureAllowed()) {
+            return false;
+        }
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                edgeSwipeDownX = ev.getX();
+                edgeSwipeDownY = ev.getY();
+                edgeSwipeTracking = edgeSwipeDownX <= edgeSwipeStartWidth;
+                edgeSwipeTriggered = false;
+                return edgeSwipeTracking;
+            case MotionEvent.ACTION_MOVE:
+                if (!edgeSwipeTracking || edgeSwipeTriggered) {
+                    return edgeSwipeTriggered;
+                }
+                float dx = ev.getX() - edgeSwipeDownX;
+                float dy = Math.abs(ev.getY() - edgeSwipeDownY);
+                if (dx < -edgeSwipeTouchSlop || dy > edgeSwipeTriggerDistance) {
+                    return true;
+                }
+                if (dx >= edgeSwipeTriggerDistance && dx > dy * 1.5f) {
+                    edgeSwipeTriggered = true;
+                    onBackPressed();
+                    return true;
+                }
+                return true;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                boolean handled = edgeSwipeTracking || edgeSwipeTriggered;
+                edgeSwipeTracking = false;
+                edgeSwipeTriggered = false;
+                return handled;
+            default:
+                return edgeSwipeTriggered;
+        }
+    }
+    private boolean isGlobalSwipeBackGestureAllowed() {
+        return Shaft.sSettings != null
+                && Shaft.sSettings.isGlobalSwipeBack()
+                && !(this instanceof MainActivity)
+                && !isFinishing();
+    }
+
 
     public void initModel() {
 

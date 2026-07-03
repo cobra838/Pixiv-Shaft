@@ -18,8 +18,6 @@ import com.google.firebase.analytics.FirebaseAnalytics;
 import com.google.gson.Gson;
 import com.hjq.toast.Toaster;
 
-import com.billy.android.swipe.SmartSwipeBack;
-import com.scwang.smart.refresh.footer.ClassicsFooter;
 import com.getkeepsafe.relinker.ReLinker;
 import com.tencent.mmkv.MMKV;
 
@@ -460,15 +458,6 @@ public class Shaft extends Application implements ServicesProvider {
         IntentFilter filter = new IntentFilter();
         filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
         registerReceiver(netWorkStateReceiver, filter);
-
-        if (sSettings.isGlobalSwipeBack()) {
-            SmartSwipeBack.activitySlidingBack(this, new SmartSwipeBack.ActivitySwipeBackFilter() {
-                @Override
-                public boolean onFilter(Activity activity) {
-                    return !(activity instanceof MainActivity);
-                }
-            });
-        }
 
         ShortcutHelper.addAppShortcuts();
 
