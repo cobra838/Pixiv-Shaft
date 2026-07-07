@@ -925,6 +925,9 @@
     </plurals>
     <string name="type_user">用户</string>
     <string name="add_keyword">添加关键字</string>
+    <string name="search_tag_input_style">搜索页标签输入样式</string>
+    <string name="search_tag_input_style_v1">V1 文本框</string>
+    <string name="search_tag_input_style_v2">V2 标签</string>
     <string name="my_bookmarked_illusts">收藏的插画漫画</string>
     <string name="my_bookmarked_novels">收藏的小说</string>
     <string name="pixivision_articles">Pixivision Articles</string>

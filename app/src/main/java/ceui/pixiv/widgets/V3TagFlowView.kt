@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.text.InputType
 import android.util.AttributeSet
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -57,9 +58,12 @@ class V3TagFlowView @JvmOverloads constructor(
 
     /**
      * When non-null, chip taps invoke this instead of opening SearchActivity.
-     * Useful for e.g. tag-input in SearchActivity itself (tap = remove chip).
+     * Useful for e.g. tag-input in SearchActivity itself (tap = edit chip).
      */
     var onTagClick: ((name: String) -> Unit)? = null
+
+    /** Optional handler for tapping the trailing remove icon on editable chips. */
+    var onTagRemoveClick: ((name: String) -> Unit)? = null
 
     /**
      * Optional long-press handler. When non-null, long-pressing a chip invokes
@@ -233,6 +237,7 @@ class V3TagFlowView @JvmOverloads constructor(
                 idx == lastIndex -> 0
                 else -> gap
             }
+            var removePressed = false
             val tv = TextView(context).apply {
                 text = buildString {
                     if (showHashPrefix) append("# ")
@@ -257,6 +262,7 @@ class V3TagFlowView @JvmOverloads constructor(
                 // Shrink end padding when the × occupies space; otherwise the chip looks lopsided.
                 val endPadding = if (showRemoveIcon) (hPad - 4.ppppx) else hPad
                 setPaddingRelative(hPad, vPad, endPadding, vPad)
+                gravity = Gravity.CENTER_VERTICAL
                 layoutParams = LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -282,6 +288,33 @@ class V3TagFlowView @JvmOverloads constructor(
                 // 长按回调晚读：渲染时 onTagLongClick 可能尚未 set（SearchActivity 里先
                 // refreshChipsUI 再 setOnTagLongClick），所以监听器无条件挂、回调在长按
                 // 触发时再取——和 onTagClick 同套路。
+                setOnTouchListener { _, event ->
+                    if (!showRemoveIcon || onTagRemoveClick == null) {
+                        return@setOnTouchListener false
+                    }
+                    val endDrawable = compoundDrawablesRelative[2] ?: return@setOnTouchListener false
+                    val iconAreaStart = width - paddingRight - endDrawable.bounds.width() - compoundDrawablePadding
+                    val isOnRemoveIcon = event.x >= iconAreaStart
+                    when (event.actionMasked) {
+                        MotionEvent.ACTION_DOWN -> {
+                            removePressed = isOnRemoveIcon
+                            removePressed
+                        }
+                        MotionEvent.ACTION_UP -> {
+                            val handled = removePressed && isOnRemoveIcon
+                            removePressed = false
+                            if (handled) {
+                                onTagRemoveClick?.invoke(name)
+                            }
+                            handled
+                        }
+                        MotionEvent.ACTION_CANCEL -> {
+                            removePressed = false
+                            false
+                        }
+                        else -> removePressed
+                    }
+                }
                 setOnLongClickListener {
                     val handler = onTagLongClick
                     if (handler != null) {
@@ -292,7 +325,9 @@ class V3TagFlowView @JvmOverloads constructor(
                     true
                 }
             }
-            applyTouchScale(tv, 0.94f)
+            if (!showRemoveIcon) {
+                applyTouchScale(tv, 0.94f)
+            }
             addView(tv)
         }
 

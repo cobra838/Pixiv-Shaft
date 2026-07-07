@@ -886,6 +886,9 @@
     <string name="date_minute_plurals_zero">剛剛</string>
     <string name="type_user">用戶</string>
     <string name="add_keyword">添加關鍵字</string>
+    <string name="search_tag_input_style">搜尋頁標籤輸入樣式</string>
+    <string name="search_tag_input_style_v1">V1 文字框</string>
+    <string name="search_tag_input_style_v2">V2 標籤</string>
     <string name="my_bookmarked_illusts">收藏的插畫漫畫</string>
     <string name="my_bookmarked_novels">收藏的小說</string>
     <string name="pixivision_articles">Pixivision Articles</string>

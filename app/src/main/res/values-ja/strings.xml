@@ -884,6 +884,9 @@
     <string name="date_minute_plurals_zero">たった今</string>
     <string name="type_user">ユーザー</string>
     <string name="add_keyword">キーワードを追加</string>
+    <string name="search_tag_input_style">検索タグ入力スタイル</string>
+    <string name="search_tag_input_style_v1">V1 テキスト</string>
+    <string name="search_tag_input_style_v2">V2 タグ</string>
     <string name="my_bookmarked_illusts">ブックマークしたイラスト</string>
     <string name="my_bookmarked_novels">ブックマークした小説</string>
     <string name="pixivision_articles">Pixivision Articles</string>

@@ -9,6 +9,7 @@ import android.content.ComponentName;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.text.TextUtils;
+import android.view.View;
 import android.widget.CompoundButton;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -124,6 +125,35 @@ public class FragmentSettingsAppearance extends SettingsPageFragment<FragmentSet
         });
         baseBind.globalSwipeBackRela.setOnClickListener(v ->
                 baseBind.globalSwipeBack.performClick());
+
+        // 搜索标签输入框样式
+        final String[] SEARCH_TAG_INPUT_STYLE_NAMES = new String[]{
+                getString(R.string.search_tag_input_style_v1),
+                getString(R.string.search_tag_input_style_v2)
+        };
+        baseBind.searchTagInputStyle.setText(
+                SEARCH_TAG_INPUT_STYLE_NAMES[Shaft.sSettings.getSearchTagInputStyle()]
+        );
+        baseBind.searchTagInputStyleRela.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                new QMUIDialog.CheckableDialogBuilder(mContext)
+                        .setCheckedIndex(Shaft.sSettings.getSearchTagInputStyle())
+                        .setSkinManager(QMUISkinManager.defaultInstance(mContext))
+                        .addItems(SEARCH_TAG_INPUT_STYLE_NAMES, new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                Shaft.sSettings.setSearchTagInputStyle(which);
+                                Common.showToast(getString(R.string.string_428), 2);
+                                Local.setSettings(Shaft.sSettings);
+                                baseBind.searchTagInputStyle.setText(SEARCH_TAG_INPUT_STYLE_NAMES[which]);
+                                dialog.dismiss();
+                            }
+                        })
+                        .create()
+                        .show();
+            }
+        });
 
         // 列数
         baseBind.lineCount.setText(getString(R.string.string_349, Shaft.sSettings.getLineCount()));

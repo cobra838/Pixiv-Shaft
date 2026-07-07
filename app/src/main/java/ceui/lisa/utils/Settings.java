@@ -378,6 +378,9 @@ public class Settings {
     // 关掉后冷启命中磁盘快照就停在快照上，由用户下拉刷新才拉新内容
     private boolean autoRefreshHomeFeed = true;
 
+    // 搜索页标签输入样式 0=v1 旧文本框 1=v2 当前标签 chip
+    private int searchTagInputStyle = 1;
+
     /** @deprecated legacy display-name language；仅供 AppLocalesBootstrap 一次性迁移读取，请使用 {@link ceui.pixiv.i18n.AppLocales}。 */
     @Deprecated
     public String getAppLanguage() {
@@ -577,6 +580,20 @@ public class Settings {
 
     public void setSearchFilter(String searchFilter) {
         this.searchFilter = searchFilter;
+    }
+
+    public int getSearchTagInputStyle() {
+        if (searchTagInputStyle < 0 || searchTagInputStyle > 1) {
+            return 1;
+        }
+        return searchTagInputStyle;
+    }
+
+    public void setSearchTagInputStyle(int searchTagInputStyle) {
+        if (searchTagInputStyle < 0 || searchTagInputStyle > 1) {
+            searchTagInputStyle = 1;
+        }
+        this.searchTagInputStyle = searchTagInputStyle;
     }
 
     public boolean isRelatedIllustNoLimit() {

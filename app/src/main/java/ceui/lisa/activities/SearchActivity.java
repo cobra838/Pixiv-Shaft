@@ -9,6 +9,7 @@ import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.KeyEvent;
 import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.URLUtil;
@@ -21,9 +22,12 @@ import com.qmuiteam.qmui.widget.dialog.QMUIDialog;
 import com.qmuiteam.qmui.widget.dialog.QMUIDialogAction;
 import com.qmuiteam.qmui.widget.dialog.QMUITipDialog;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentPagerAdapter;
 import androidx.lifecycle.MutableLiveData;
@@ -62,6 +66,9 @@ public class SearchActivity extends BaseActivity<FragmentNewSearchBinding> {
     private long mExitTime;
     private final java.util.List<String> committedTags = new java.util.ArrayList<>();
     private SearchHintViewModel hintViewModel;
+    private int editingTagIndex = -1;
+    private boolean lastImeVisible = false;
+    private boolean suppressHintUpdate = false;
 
     @Override
     protected void initBundle(Bundle bundle) {
@@ -73,7 +80,7 @@ public class SearchActivity extends BaseActivity<FragmentNewSearchBinding> {
      * ViewModel 创建/播种放这里而不是 initBundle：BaseActivity 只在 intent 带 extras 时才调
      * initBundle，但 initView/initData 里的 TextWatcher、筛选菜单、翻页监听器无条件挂载。
      * 一旦 Activity 被无 extras 地重建（系统/崩溃重启重投裸 intent），searchModel 就还是 null，
-     * 首个按键 afterTextChanged → pushKeywordFromChipsAndInput 直接 NPE。initModel 无条件调用，
+     * 首个按键 afterTextChanged → pushKeywordFromCurrentUi 直接 NPE。initModel 无条件调用，
      * 保证这两个核心 ViewModel 永远先于任何监听器就绪；keyWord/index 缺省时走字段默认值("",0)。
      */
     @Override
@@ -130,24 +137,31 @@ public class SearchActivity extends BaseActivity<FragmentNewSearchBinding> {
         };
         // Seed committed chips from the incoming keyword (space-separated), clear
         // the input itself — the chip row represents the active query.
-        if (!TextUtils.isEmpty(keyWord)) {
-            for (String part : keyWord.trim().split("\\s+")) {
-                if (!TextUtils.isEmpty(part)) committedTags.add(part);
-            }
-        }
-        baseBind.searchTagsFlow.setShowRemoveIcon(true);
-        refreshChipsUI();
-        baseBind.searchTagsFlow.setOnTagClick(name -> {
-            committedTags.remove(name);
+        applySearchInputModeUI();
+        syncCommittedTagsFromText(keyWord);
+        if (useChipInputMode()) {
+            baseBind.searchTagsFlow.setShowRemoveIcon(true);
             refreshChipsUI();
-            pushKeywordFromChipsAndInput();
-            triggerSearchIfNotEmpty();
-            return kotlin.Unit.INSTANCE;
-        });
-        baseBind.searchTagsFlow.setOnTagLongClick(name -> {
-            showTagActionMenu(name);
-            return kotlin.Unit.INSTANCE;
-        });
+            baseBind.searchTagsFlow.setOnTagClick(name -> {
+                startEditingChip(name);
+                return kotlin.Unit.INSTANCE;
+            });
+            baseBind.searchTagsFlow.setOnTagRemoveClick(name -> {
+                removeCommittedTag(name);
+                refreshChipsUI();
+                pushKeywordFromCurrentUi();
+                triggerSearchIfNotEmpty();
+                return kotlin.Unit.INSTANCE;
+            });
+            baseBind.searchTagsFlow.setOnTagLongClick(name -> {
+                showTagActionMenu(name);
+                return kotlin.Unit.INSTANCE;
+            });
+        } else {
+            baseBind.searchKeywordBox.setText(keyWord);
+            baseBind.searchKeywordBox.setSelection(baseBind.searchKeywordBox.getText().length());
+            baseBind.clearSearchKeyword.setVisibility(TextUtils.isEmpty(keyWord) ? View.INVISIBLE : View.VISIBLE);
+        }
         // 三个 tab 均已迁 feeds（autoLoad=false 懒加载）。必须用 BEHAVIOR_RESUME_ONLY_CURRENT_FRAGMENT，
         // 否则离屏 tab 也到 RESUMED → onResume ensureLoaded → 开屏就替用户把三个 tab 各搜一次（旧 legacy
         // 靠 setUserVisibleHint 懒加载只搜可见 tab）。改 behavior 1 后只有可见 tab 开搜，其余进 tab 才搜。
@@ -214,6 +228,7 @@ public class SearchActivity extends BaseActivity<FragmentNewSearchBinding> {
 
     @Override
     protected void initData() {
+        installSearchUiDismissHandlers();
         baseBind.toolbar.setNavigationOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -241,138 +256,117 @@ public class SearchActivity extends BaseActivity<FragmentNewSearchBinding> {
                 return false;
             }
         });
-        baseBind.searchTagsFlow.getEditor().addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
+        if (useChipInputMode()) {
+            EditText chipEditor = baseBind.searchTagsFlow.getEditor();
+            chipEditor.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
 
-            }
+                }
 
-            @Override
-            public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
+                @Override
+                public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
 
-            }
+                }
 
-            @Override
-            public void afterTextChanged(Editable editable) {
-                // Space after content commits; space on an otherwise blank input
-                // is dropped so the user can't spam leading/consecutive spaces.
-                String current = editable.toString();
-                if (current.length() > 0 && current.charAt(current.length() - 1) == ' ') {
-                    String tag = current.substring(0, current.length() - 1).trim();
-                    if (tag.isEmpty()) {
-                        baseBind.searchTagsFlow.getEditor().setText("");
+                @Override
+                public void afterTextChanged(Editable editable) {
+                    String current = editable.toString();
+                    if (current.length() > 0 && current.charAt(current.length() - 1) == ' ') {
+                        String tag = current.substring(0, current.length() - 1).trim();
+                        if (tag.isEmpty()) {
+                            chipEditor.setText("");
+                        } else {
+                            commitTagFromInput(tag);
+                        }
+                        hintViewModel.hideHints();
+                        return;
+                    }
+                    pushKeywordFromCurrentUi();
+
+                    String typed = current.trim();
+                    if (!typed.isEmpty() && !Common.isNumeric(typed)) {
+                        hintViewModel.onTextChanged(typed);
                     } else {
-                        commitTagFromInput(tag);
+                        hintViewModel.clearHints();
                     }
-                    hintViewModel.hideHints();
-                    return;
                 }
-                pushKeywordFromChipsAndInput();
+            });
+            chipEditor.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+                @Override
+                public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                    return submitCurrentSearch(chipEditor.getText().toString().trim());
+                }
+            });
+        } else {
+            baseBind.searchKeywordBox.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
 
-                // Feed autocomplete for the current word being typed
-                String typed = current.trim();
-                if (!typed.isEmpty() && !Common.isNumeric(typed)) {
-                    hintViewModel.onTextChanged(typed);
-                } else {
-                    hintViewModel.clearHints();
                 }
-            }
-        });
-        baseBind.searchTagsFlow.getEditor().setOnEditorActionListener(new TextView.OnEditorActionListener() {
-            @Override
-            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
-                String trimmedKeyword = baseBind.searchTagsFlow.getEditor().getText().toString().trim();
-                if (TextUtils.isEmpty(trimmedKeyword) && TextUtils.isEmpty(searchModel.getStarSize().getValue())) {
-                    if (!committedTags.isEmpty()) {
-                        // Enter with empty input + existing chips → just fire the search.
-                        searchModel.getKeyword().setValue(joinedChips());
-                        searchModel.getNowGo().setValue("search_now");
-                        Common.hideKeyboard(mActivity);
-                        return true;
+
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+
+                }
+
+                @Override
+                public void afterTextChanged(Editable editable) {
+                    String current = editable.toString();
+                    baseBind.clearSearchKeyword.setVisibility(current.isEmpty() ? View.INVISIBLE : View.VISIBLE);
+                    syncCommittedTagsFromText(current);
+                    searchModel.getKeyword().setValue(current.trim());
+                    if (suppressHintUpdate) {
+                        suppressHintUpdate = false;
+                        hintViewModel.hideHints();
+                        return;
                     }
-                    Common.showToast(getString(R.string.string_139));
+
+                    String lastToken = getEditingToken(current);
+                    if (!TextUtils.isEmpty(lastToken) && !Common.isNumeric(lastToken)) {
+                        hintViewModel.onTextChanged(lastToken);
+                    } else {
+                        hintViewModel.clearHints();
+                    }
+                }
+            });
+            baseBind.searchKeywordBox.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+                @Override
+                public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                    return submitCurrentSearch(baseBind.searchKeywordBox.getText().toString().trim());
+                }
+            });
+            baseBind.searchKeywordBox.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+                @Override
+                public void onFocusChange(View v, boolean hasFocus) {
+                    if (hasFocus && baseBind.hintList.getAdapter() != null) {
+                        animateHintList(true);
+                    }
+                }
+            });
+            baseBind.searchKeywordBox.setOnTouchListener(new View.OnTouchListener() {
+                @Override
+                public boolean onTouch(View v, MotionEvent event) {
+                    if (event.getActionMasked() == MotionEvent.ACTION_DOWN
+                            && baseBind.hintList.getAdapter() instanceof SearchHintAdapter) {
+                        SearchHintAdapter adapter = (SearchHintAdapter) baseBind.hintList.getAdapter();
+                        if (TextUtils.equals(adapter.getKeyword(),
+                                getEditingToken(baseBind.searchKeywordBox.getText().toString()))) {
+                            animateHintList(true);
+                        }
+                    }
                     return false;
                 }
-
-                // 高风险纯数字词不能落入下面的作品 ID / 用户 ID 直达分支。
-                // 先按完整查询（已有 chips + 本次输入）做政策判断，命中就像普通
-                // 关键词一样进入结果态，由三个 feed 显示统一提示。
-                String existingKeyword = joinedChips();
-                String policyQuery = TextUtils.isEmpty(existingKeyword)
-                        ? trimmedKeyword
-                        : TextUtils.isEmpty(trimmedKeyword)
-                            ? existingKeyword
-                            : existingKeyword + " " + trimmedKeyword;
-                if (SearchRiskPolicy.shouldWithhold(policyQuery)) {
-                    if (!TextUtils.isEmpty(trimmedKeyword) && !committedTags.contains(trimmedKeyword)) {
-                        committedTags.add(trimmedKeyword);
-                        refreshChipsUI();
-                    }
-                    baseBind.searchTagsFlow.getEditor().setText("");
-                    searchModel.getKeyword().setValue(joinedChips());
-                    searchModel.getNowGo().setValue("search_now");
+            });
+            baseBind.clearSearchKeyword.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    baseBind.searchKeywordBox.setText("");
                     hintViewModel.hideHints();
-                    Common.hideKeyboard(mActivity);
-                    return true;
                 }
+            });
+        }
 
-                if (URLUtil.isValidUrl(trimmedKeyword)) {
-                    try {
-                        PixivOperate.insertSearchHistory(trimmedKeyword, SearchTypeUtil.SEARCH_TYPE_DB_URL);
-                        Intent intent = new Intent(mContext, OutWakeActivity.class);
-                        intent.setData(Uri.parse(trimmedKeyword));
-                        startActivity(intent);
-                        mActivity.finish();
-                    } catch (Exception e) {
-                        Common.showToast(e.toString());
-                        e.printStackTrace();
-                    }
-                }
-                else if(Common.isNumeric(trimmedKeyword)){
-                    QMUITipDialog tipDialog = new QMUITipDialog.Builder(mContext)
-                            .setIconType(QMUITipDialog.Builder.ICON_TYPE_LOADING)
-                            .setTipWord(getString(R.string.string_429))
-                            .create();
-                    tipDialog.show();
-                    //先假定为作品id
-                    PixivOperate.getIllustByID(tryParseId(trimmedKeyword), mContext, new Callback<Void>() {
-                        @Override
-                        public void doSomething(Void t) {
-                            PixivOperate.insertSearchHistory(trimmedKeyword, SearchTypeUtil.SEARCH_TYPE_DB_ILLUSTSID);
-                            tipDialog.dismiss();
-                            mActivity.finish();
-                        }
-                    }, new Callback<Void>() {
-                        @Override
-                        public void doSomething(Void t) {
-                            tipDialog.dismiss();
-                            PixivOperate.insertSearchHistory(trimmedKeyword, SearchTypeUtil.SEARCH_TYPE_DB_USERID);
-                            Intent intent = new Intent(mContext, UActivity.class);
-                            intent.putExtra(Params.USER_ID, Common.safeUserId(trimmedKeyword));
-                            startActivity(intent);
-                            mActivity.finish();
-                        }
-                    });
-                }
-                else{
-                    // Commit the freshly-typed keyword as a chip, clear the input,
-                    // re-join all chips into the search keyword, then fire search.
-                    if (!committedTags.contains(trimmedKeyword)) {
-                        committedTags.add(trimmedKeyword);
-                        refreshChipsUI();
-                    }
-                    baseBind.searchTagsFlow.getEditor().setText("");
-                    searchModel.getKeyword().setValue(joinedChips());
-                    searchModel.getNowGo().setValue("search_now");
-                    Common.hideKeyboard(mActivity);
-                }
-
-                hintViewModel.hideHints();
-                return true;
-            }
-        });
-
-        // ── Autocomplete hint list ──────────────────────────────────────
         // Position hint list right below the toolbar (above tabs + content)
         baseBind.toolbar.post(() -> {
             androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams lp =
@@ -388,20 +382,33 @@ public class SearchActivity extends BaseActivity<FragmentNewSearchBinding> {
             adapter.setOnItemClickListener((v, position, viewType) -> {
                 hintViewModel.hideHints();
                 String tag = hints.get(position).getTag();
-                if (!committedTags.contains(tag)) {
-                    committedTags.add(tag);
-                    refreshChipsUI();
+                if (useChipInputMode()) {
+                    addCommittedTag(tag);
+                    baseBind.searchTagsFlow.getEditor().setText("");
+                    pushKeywordFromCurrentUi();
+                    triggerSearchIfNotEmpty();
+                } else {
+                    String updatedKeyword = replaceLastKeywordToken(tag, false);
+                    suppressHintUpdate = true;
+                    baseBind.searchKeywordBox.setText(updatedKeyword);
+                    baseBind.searchKeywordBox.setSelection(updatedKeyword.length());
+                    syncCommittedTagsFromText(updatedKeyword);
+                    searchModel.getKeyword().setValue(updatedKeyword);
+                    searchModel.getNowGo().setValue("search_now");
                 }
-                baseBind.searchTagsFlow.getEditor().setText("");
-                pushKeywordFromChipsAndInput();
-                triggerSearchIfNotEmpty();
                 Common.hideKeyboard(mActivity);
             });
             adapter.setOnItemLongClickListener((v, position, viewType) -> {
                 hintViewModel.hideHints();
                 String tagName = hints.get(position).getTag();
-                baseBind.searchTagsFlow.getEditor().setText(tagName);
-                baseBind.searchTagsFlow.getEditor().setSelection(tagName.length());
+                if (useChipInputMode()) {
+                    baseBind.searchTagsFlow.getEditor().setText(tagName);
+                    baseBind.searchTagsFlow.getEditor().setSelection(tagName.length());
+                } else {
+                    String updatedKeyword = replaceLastKeywordToken(tagName, true);
+                    baseBind.searchKeywordBox.setText(updatedKeyword);
+                    baseBind.searchKeywordBox.setSelection(updatedKeyword.length());
+                }
             });
             baseBind.hintList.setAdapter(adapter);
         });
@@ -444,15 +451,12 @@ public class SearchActivity extends BaseActivity<FragmentNewSearchBinding> {
 
     /**
      * Commit the typed text as a new chip (dedupe, clear input, sync keyword).
-     * Space-triggered commits do NOT auto-search — Enter is still the "go" key.
+     * Space-triggered commits do NOT auto-search - Enter is still the "go" key.
      */
     private void commitTagFromInput(String tag) {
-        if (!committedTags.contains(tag)) {
-            committedTags.add(tag);
-            refreshChipsUI();
-        }
+        addCommittedTag(tag);
         baseBind.searchTagsFlow.getEditor().setText("");
-        pushKeywordFromChipsAndInput();
+        pushKeywordFromCurrentUi();
     }
 
     private void refreshChipsUI() {
@@ -463,24 +467,297 @@ public class SearchActivity extends BaseActivity<FragmentNewSearchBinding> {
         return android.text.TextUtils.join(" ", committedTags);
     }
 
-    private void pushKeywordFromChipsAndInput() {
-        String typed = baseBind.searchTagsFlow.getEditor().getText().toString();
-        String joined = joinedChips();
-        String combined;
-        if (TextUtils.isEmpty(joined)) {
-            combined = typed;
-        } else if (TextUtils.isEmpty(typed.trim())) {
-            combined = joined;
-        } else {
-            combined = joined + " " + typed;
+    private void pushKeywordFromCurrentUi() {
+        if (!useChipInputMode()) {
+            searchModel.getKeyword().setValue(baseBind.searchKeywordBox.getText().toString().trim());
+            return;
         }
+        String typed = baseBind.searchTagsFlow.getEditor().getText().toString().trim();
+        java.util.ArrayList<String> previewTags = new java.util.ArrayList<>(committedTags);
+        if (editingTagIndex >= 0 && editingTagIndex < previewTags.size()) {
+            if (!TextUtils.isEmpty(typed)) {
+                previewTags.set(editingTagIndex, typed);
+            }
+        } else if (!TextUtils.isEmpty(typed)) {
+            previewTags.add(typed);
+        }
+        String combined = TextUtils.join(" ", previewTags);
         searchModel.getKeyword().setValue(combined);
     }
 
     private void triggerSearchIfNotEmpty() {
-        if (!committedTags.isEmpty()) {
+        if (useChipInputMode()) {
+            if (!committedTags.isEmpty()) {
+                searchModel.getNowGo().setValue("search_now");
+            }
+        } else if (!TextUtils.isEmpty(baseBind.searchKeywordBox.getText().toString().trim())) {
             searchModel.getNowGo().setValue("search_now");
         }
+    }
+
+    private boolean useChipInputMode() {
+        return Shaft.sSettings.getSearchTagInputStyle() == 1;
+    }
+
+    private void applySearchInputModeUI() {
+        int chipVisibility = useChipInputMode() ? View.VISIBLE : View.GONE;
+        int textVisibility = useChipInputMode() ? View.GONE : View.VISIBLE;
+        baseBind.searchTagsScroll.setVisibility(chipVisibility);
+        baseBind.searchKeywordBoxContainer.setVisibility(textVisibility);
+    }
+
+    private void installSearchUiDismissHandlers() {
+        baseBind.topParent.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                dismissTransientSearchUi();
+            }
+        });
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (dismissTransientSearchUi()) {
+                    return;
+                }
+                setEnabled(false);
+                getOnBackPressedDispatcher().onBackPressed();
+                setEnabled(true);
+            }
+        });
+        ViewCompat.setOnApplyWindowInsetsListener(baseBind.topParent, (v, insets) -> {
+            boolean imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime());
+            if (lastImeVisible && !imeVisible) {
+                dismissTransientSearchUi();
+            }
+            lastImeVisible = imeVisible;
+            return insets;
+        });
+    }
+
+    private boolean dismissTransientSearchUi() {
+        boolean hadHints = baseBind.hintList.getVisibility() == View.VISIBLE;
+        EditText input = getActiveSearchInput();
+        boolean hadFocus = input != null && input.isFocused();
+        boolean canceledChipEditing = false;
+        if (useChipInputMode() && editingTagIndex >= 0) {
+            EditText chipEditor = baseBind.searchTagsFlow.getEditor();
+            if (chipEditor != null) {
+                chipEditor.setText("");
+            }
+            editingTagIndex = -1;
+            canceledChipEditing = true;
+            pushKeywordFromCurrentUi();
+        }
+        if (hadHints) {
+            hintViewModel.hideHints();
+        }
+        if (hadFocus) {
+            input.clearFocus();
+            baseBind.topParent.requestFocus();
+        }
+        if (hadHints || hadFocus || canceledChipEditing) {
+            Common.hideKeyboard(mActivity);
+        }
+        return hadHints || hadFocus || canceledChipEditing;
+    }
+
+    private EditText getActiveSearchInput() {
+        return useChipInputMode() ? baseBind.searchTagsFlow.getEditor() : baseBind.searchKeywordBox;
+    }
+
+    private void addCommittedTag(String tag) {
+        if (TextUtils.isEmpty(tag)) {
+            editingTagIndex = -1;
+            return;
+        }
+        int existingIndex = committedTags.indexOf(tag);
+        if (editingTagIndex >= 0 && editingTagIndex < committedTags.size()) {
+            int targetIndex = editingTagIndex;
+            if (existingIndex >= 0 && existingIndex != targetIndex) {
+                committedTags.remove(existingIndex);
+                if (existingIndex < targetIndex) {
+                    targetIndex--;
+                }
+            }
+            committedTags.set(targetIndex, tag);
+        } else if (existingIndex < 0) {
+            committedTags.add(tag);
+        }
+        editingTagIndex = -1;
+        refreshChipsUI();
+    }
+
+    private void removeCommittedTag(String name) {
+        int removedIndex = committedTags.indexOf(name);
+        if (removedIndex < 0) {
+            return;
+        }
+        committedTags.remove(removedIndex);
+        if (editingTagIndex > removedIndex) {
+            editingTagIndex--;
+        } else if (editingTagIndex == removedIndex) {
+            editingTagIndex = -1;
+        }
+    }
+
+    private void startEditingChip(String name) {
+        editingTagIndex = committedTags.indexOf(name);
+        if (editingTagIndex < 0) {
+            editingTagIndex = committedTags.size();
+        }
+        EditText ed = baseBind.searchTagsFlow.getEditor();
+        if (ed != null) {
+            ed.setText(name);
+            ed.setSelection(name.length());
+            ed.requestFocus();
+            InputMethodManager imm = (InputMethodManager) mContext
+                    .getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.showSoftInput(ed, InputMethodManager.SHOW_IMPLICIT);
+            }
+        }
+        pushKeywordFromCurrentUi();
+    }
+
+    private void syncCommittedTagsFromText(String text) {
+        committedTags.clear();
+        committedTags.addAll(parseKeywordTokens(text));
+    }
+
+    private java.util.List<String> parseKeywordTokens(String text) {
+        java.util.ArrayList<String> result = new java.util.ArrayList<>();
+        if (TextUtils.isEmpty(text)) {
+            return result;
+        }
+        String trimmed = text.trim();
+        if (trimmed.isEmpty()) {
+            return result;
+        }
+        for (String part : trimmed.split("\\s+")) {
+            if (!TextUtils.isEmpty(part)) {
+                result.add(part);
+            }
+        }
+        return result;
+    }
+
+    private String getEditingToken(String current) {
+        java.util.List<String> parts = parseKeywordTokens(current);
+        if (parts.isEmpty()) {
+            return "";
+        }
+        return current.endsWith(" ") ? "" : parts.get(parts.size() - 1);
+    }
+
+    private String replaceLastKeywordToken(String replacement, boolean appendTrailingSpace) {
+        java.util.List<String> parts = parseKeywordTokens(baseBind.searchKeywordBox.getText().toString());
+        boolean appendAsNew = baseBind.searchKeywordBox.getText().toString().endsWith(" ") || parts.isEmpty();
+        if (appendAsNew) {
+            parts.add(replacement);
+        } else {
+            parts.set(parts.size() - 1, replacement);
+        }
+        String updated = TextUtils.join(" ", parts);
+        return appendTrailingSpace ? updated + " " : updated;
+    }
+
+    private boolean submitCurrentSearch(String trimmedKeyword) {
+        if (TextUtils.isEmpty(trimmedKeyword)) {
+            if (useChipInputMode() && !committedTags.isEmpty()) {
+                searchModel.getKeyword().setValue(joinedChips());
+                searchModel.getNowGo().setValue("search_now");
+                Common.hideKeyboard(mActivity);
+                hintViewModel.hideHints();
+                return true;
+            }
+            if (!TextUtils.isEmpty(searchModel.getStarSize().getValue())) {
+                pushKeywordFromCurrentUi();
+                searchModel.getNowGo().setValue("search_now");
+                Common.hideKeyboard(mActivity);
+                hintViewModel.hideHints();
+                return true;
+            }
+            Common.showToast(getString(R.string.string_139));
+            return false;
+        }
+
+        String policyQuery = trimmedKeyword;
+        if (useChipInputMode()) {
+            String existingKeyword = joinedChips();
+            if (!TextUtils.isEmpty(existingKeyword)) {
+                policyQuery = existingKeyword + " " + trimmedKeyword;
+            }
+        }
+        if (SearchRiskPolicy.shouldWithhold(policyQuery)) {
+            if (useChipInputMode()) {
+                addCommittedTag(trimmedKeyword);
+                baseBind.searchTagsFlow.getEditor().setText("");
+                searchModel.getKeyword().setValue(joinedChips());
+            } else {
+                syncCommittedTagsFromText(trimmedKeyword);
+                searchModel.getKeyword().setValue(trimmedKeyword);
+            }
+            searchModel.getNowGo().setValue("search_now");
+            Common.hideKeyboard(mActivity);
+            hintViewModel.hideHints();
+            return true;
+        }
+
+        if (URLUtil.isValidUrl(trimmedKeyword)) {
+            try {
+                PixivOperate.insertSearchHistory(trimmedKeyword, SearchTypeUtil.SEARCH_TYPE_DB_URL);
+                Intent intent = new Intent(mContext, OutWakeActivity.class);
+                intent.setData(Uri.parse(trimmedKeyword));
+                startActivity(intent);
+                mActivity.finish();
+            } catch (Exception e) {
+                Common.showToast(e.toString());
+                e.printStackTrace();
+            }
+            hintViewModel.hideHints();
+            return true;
+        }
+
+        if (Common.isNumeric(trimmedKeyword)) {
+            QMUITipDialog tipDialog = new QMUITipDialog.Builder(mContext)
+                    .setIconType(QMUITipDialog.Builder.ICON_TYPE_LOADING)
+                    .setTipWord(getString(R.string.string_429))
+                    .create();
+            tipDialog.show();
+            PixivOperate.getIllustByID(tryParseId(trimmedKeyword), mContext, new Callback<Void>() {
+                @Override
+                public void doSomething(Void t) {
+                    PixivOperate.insertSearchHistory(trimmedKeyword, SearchTypeUtil.SEARCH_TYPE_DB_ILLUSTSID);
+                    tipDialog.dismiss();
+                    mActivity.finish();
+                }
+            }, new Callback<Void>() {
+                @Override
+                public void doSomething(Void t) {
+                    tipDialog.dismiss();
+                    PixivOperate.insertSearchHistory(trimmedKeyword, SearchTypeUtil.SEARCH_TYPE_DB_USERID);
+                    Intent intent = new Intent(mContext, UActivity.class);
+                    intent.putExtra(Params.USER_ID, Common.safeUserId(trimmedKeyword));
+                    startActivity(intent);
+                    mActivity.finish();
+                }
+            });
+            hintViewModel.hideHints();
+            return true;
+        }
+
+        if (useChipInputMode()) {
+            addCommittedTag(trimmedKeyword);
+            baseBind.searchTagsFlow.getEditor().setText("");
+            searchModel.getKeyword().setValue(joinedChips());
+        } else {
+            syncCommittedTagsFromText(trimmedKeyword);
+            searchModel.getKeyword().setValue(trimmedKeyword);
+        }
+        searchModel.getNowGo().setValue("search_now");
+        Common.hideKeyboard(mActivity);
+        hintViewModel.hideHints();
+        return true;
     }
 
     private void animateHintList(boolean show) {
@@ -526,25 +803,12 @@ public class SearchActivity extends BaseActivity<FragmentNewSearchBinding> {
                     if (which == 0) {
                         Common.copy(mContext, name);
                     } else if (which == 1) {
-                        committedTags.remove(name);
+                        removeCommittedTag(name);
                         refreshChipsUI();
-                        pushKeywordFromChipsAndInput();
+                        pushKeywordFromCurrentUi();
                         triggerSearchIfNotEmpty();
                     } else if (which == 2) {
-                        committedTags.remove(name);
-                        refreshChipsUI();
-                        EditText ed = baseBind.searchTagsFlow.getEditor();
-                        if (ed != null) {
-                            ed.setText(name);
-                            ed.setSelection(name.length());
-                            ed.requestFocus();
-                            InputMethodManager imm = (InputMethodManager) mContext
-                                    .getSystemService(Context.INPUT_METHOD_SERVICE);
-                            if (imm != null) {
-                                imm.showSoftInput(ed, InputMethodManager.SHOW_IMPLICIT);
-                            }
-                        }
-                        pushKeywordFromChipsAndInput();
+                        startEditingChip(name);
                     }
                     dialog.dismiss();
                 })

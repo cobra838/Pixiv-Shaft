@@ -884,6 +884,9 @@
     <string name="date_minute_plurals_zero">Just now</string>
     <string name="type_user">User</string>
     <string name="add_keyword">Add keyword</string>
+    <string name="search_tag_input_style">Search tag input style</string>
+    <string name="search_tag_input_style_v1">V1 Text Box</string>
+    <string name="search_tag_input_style_v2">V2 Tags</string>
     <string name="my_bookmarked_illusts">Bookmarked illustrations/manga</string>
     <string name="my_bookmarked_novels">Bookmarked novels</string>
     <string name="pixivision_articles">Pixivision Articles</string>

@@ -884,6 +884,9 @@
     <string name="date_minute_plurals_zero">Az önce</string>
     <string name="type_user">Kullanıcı</string>
     <string name="add_keyword">Anahtar kelime ekle</string>
+    <string name="search_tag_input_style">Arama etiketi giris stili</string>
+    <string name="search_tag_input_style_v1">V1 Metin</string>
+    <string name="search_tag_input_style_v2">V2 Etiketler</string>
     <string name="my_bookmarked_illusts">Yer imlerine eklenen illüstrasyon/manga</string>
     <string name="my_bookmarked_novels">Yer imlerine eklenen romanlar</string>
     <string name="pixivision_articles">Pixivision makaleleri</string>

@@ -884,6 +884,9 @@
     <string name="date_minute_plurals_zero">Только что</string>
     <string name="type_user">Пользователь</string>
     <string name="add_keyword">Добавить ключевое слово</string>
+    <string name="search_tag_input_style">Стиль ввода тегов в поиске</string>
+    <string name="search_tag_input_style_v1">V1 Текст</string>
+    <string name="search_tag_input_style_v2">V2 Теги</string>
     <string name="my_bookmarked_illusts">Иллюстрации/манга в закладках</string>
     <string name="my_bookmarked_novels">Новеллы в закладках</string>
     <string name="pixivision_articles">Статьи Pixivision</string>

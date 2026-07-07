@@ -39,21 +39,62 @@
                 app:titleTextColor="@android:color/white">
 
 
-                <HorizontalScrollView
+                <FrameLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/search_et_bg"
-                    android:fillViewport="true"
-                    android:paddingHorizontal="@dimen/eight_dp"
-                    android:paddingVertical="4dp"
-                    android:scrollbars="none">
+                    android:layout_height="wrap_content">
 
-                    <ceui.pixiv.widgets.V3TagFlowView
-                        android:id="@+id/search_tags_flow"
-                        android:layout_width="wrap_content"
+                    <HorizontalScrollView
+                        android:id="@+id/search_tags_scroll"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        app:flexWrap="nowrap" />
-                </HorizontalScrollView>
+                        android:background="@drawable/search_et_bg"
+                        android:fillViewport="true"
+                        android:paddingHorizontal="@dimen/eight_dp"
+                        android:paddingVertical="4dp"
+                        android:scrollbars="none">
+
+                        <ceui.pixiv.widgets.V3TagFlowView
+                            android:id="@+id/search_tags_flow"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            app:flexWrap="nowrap" />
+                    </HorizontalScrollView>
+
+                    <RelativeLayout
+                        android:id="@+id/search_keyword_box_container"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:visibility="gone">
+
+                        <EditText
+                            android:id="@+id/search_keyword_box"
+                            android:layout_width="match_parent"
+                            android:layout_height="36dp"
+                            android:background="@drawable/search_et_bg"
+                            android:drawableStart="@drawable/ic_search_grey_24dp"
+                            android:drawablePadding="@dimen/six_dp"
+                            android:ellipsize="end"
+                            android:imeOptions="actionSearch"
+                            android:inputType="text"
+                            android:maxLines="1"
+                            android:paddingStart="@dimen/twelve_dp"
+                            android:paddingEnd="36dp"
+                            android:singleLine="true"
+                            android:textColor="@color/rank_text_color"
+                            android:textSize="14sp" />
+
+                        <ImageView
+                            android:id="@+id/clear_search_keyword"
+                            android:layout_width="30dp"
+                            android:layout_height="30dp"
+                            android:layout_alignEnd="@+id/search_keyword_box"
+                            android:layout_centerVertical="true"
+                            android:layout_marginEnd="@dimen/four_dp"
+                            android:padding="@dimen/four_dp"
+                            android:src="@drawable/ic_cancel_black_24dp"
+                            android:visibility="invisible" />
+                    </RelativeLayout>
+                </FrameLayout>
 
             </androidx.appcompat.widget.Toolbar>
 
