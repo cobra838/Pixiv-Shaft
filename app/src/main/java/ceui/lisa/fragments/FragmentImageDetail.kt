@@ -34,6 +34,7 @@ import ceui.pixiv.ui.works.ToggleToolnarViewModel
 import ceui.pixiv.utils.setOnClick
 import com.github.panpf.sketch.loadImage
 import com.github.panpf.zoomimage.util.OffsetCompat
+import com.github.panpf.zoomimage.util.TransformCompat
 import com.github.panpf.zoomimage.view.zoom.OnViewTapListener
 import com.github.panpf.zoomimage.zoom.GestureType
 import com.github.panpf.zoomimage.zoom.ReadMode
@@ -64,6 +65,13 @@ class FragmentImageDetail : BaseFragment<FragmentImageDetailBinding?>() {
     // 导致 TransactionTooLargeException。统一向 ImageDetailActivity 取。
     private val mIllustsBean: IllustsBean?
         get() = (activity as? ImageDetailActivity)?.mIllustsBean
+
+    private var pendingViewportRestore: PendingViewportRestore? = null
+    private data class PendingViewportRestore(
+        val userScale: Float,
+        val userOffsetX: Float,
+        val userOffsetY: Float,
+    )
 
     /**
      * 延迟派发过来的手势回调，现在还能不能安全地碰 fragment 的东西。
@@ -118,6 +126,7 @@ class FragmentImageDetail : BaseFragment<FragmentImageDetailBinding?>() {
      */
     override fun onDestroyView() {
         isAnimated = false
+        pendingViewportRestore = null
         super.onDestroyView()
     }
 
@@ -464,6 +473,7 @@ class FragmentImageDetail : BaseFragment<FragmentImageDetailBinding?>() {
         baseBind.emptyFrame.visibility = View.GONE
         // 重新加载（重试 / onViewCreated 再进）时复位「large 占位 → 原图」竞态状态。
         originalShown = false
+        pendingViewportRestore = null
         largeDisposable?.dispose()
         largeDisposable = null
         val isUrlMode = mIllustsBean == null && !TextUtils.isEmpty(url)
@@ -548,14 +558,20 @@ class FragmentImageDetail : BaseFragment<FragmentImageDetailBinding?>() {
      */
     private fun loadFromLocal(localUri: Uri, imageUrl: String, isUrlMode: Boolean) {
         // 本地已有原图，直读即最终图 —— 摘掉 large 占位观察，别让晚到的 large 回盖已显示的原图。
+        pendingViewportRestore = capturePendingViewportRestore()
         originalShown = true
         largeDisposable?.dispose()
         baseBind.progressCircular.visibility = View.GONE
         baseBind.image.loadImage(localUri) {
             addListener(onError = { _, _ ->
-                Timber.w("[ImageDetail] local file load FAIL uri=$localUri, fall back to network")
-                loadFromNetwork(imageUrl, isUrlMode)
-            })
+                    pendingViewportRestore = null
+                    Timber.w("[ImageDetail] local file load FAIL uri=$localUri, fall back to network")
+                    loadFromNetwork(imageUrl, isUrlMode)
+                },
+                onSuccess = { _, _ ->
+                    restorePendingViewportAfterImageSwap()
+                }
+            )
         }
     }
 
@@ -584,11 +600,20 @@ class FragmentImageDetail : BaseFragment<FragmentImageDetailBinding?>() {
                 is ImageLoadState.Success -> {
                     baseBind.progressCircular.visibility = View.GONE
                     // 原图就绪：标记 + 摘掉 large 占位观察，晚到的 large 不再回盖。
+                    pendingViewportRestore = capturePendingViewportRestore()
                     originalShown = true
                     largeDisposable?.dispose()
                     val file = state.file
                     Timber.d("[ImageDetail] result callback. file=${file.absolutePath}, size=${file.length()}, url=$shortUrl")
-                    baseBind.image.loadImage(file)
+                    baseBind.image.loadImage(file) {
+                        addListener(onError = { _, _ ->
+                                pendingViewportRestore = null
+                            },
+                            onSuccess = { _, _ ->
+                                restorePendingViewportAfterImageSwap()
+                            }
+                        )
+                    }
                     if (isUrlMode) {
                         baseBind.downloadButton.visibility = View.VISIBLE
                         baseBind.downloadButton.setOnClick {
@@ -614,6 +639,63 @@ class FragmentImageDetail : BaseFragment<FragmentImageDetailBinding?>() {
                 is ImageLoadState.Error -> {
                     baseBind.progressCircular.visibility = View.GONE
                 }
+            }
+        }
+    }
+
+    private fun capturePendingViewportRestore(): PendingViewportRestore? {
+        val zoomable = baseBind.image.zoomable
+        return buildPendingViewportRestore(
+            transform = zoomable.transformState.value,
+            base = zoomable.baseTransformState.value,
+        )
+    }
+
+    private fun buildPendingViewportRestore(
+        transform: TransformCompat,
+        base: TransformCompat,
+    ): PendingViewportRestore? {
+        val baseScale = base.scaleX
+        if (baseScale <= 0f) return null
+
+        val userScale = transform.scaleX / baseScale
+        val userOffsetX = transform.offset.x - base.offset.x * userScale
+        val userOffsetY = transform.offset.y - base.offset.y * userScale
+        if (
+            kotlin.math.abs(userScale - 1f) < MAX_SCALE_EPSILON &&
+            kotlin.math.abs(userOffsetX) < MAX_SCALE_EPSILON &&
+            kotlin.math.abs(userOffsetY) < MAX_SCALE_EPSILON
+        ) {
+            return null
+        }
+
+        return PendingViewportRestore(
+            userScale = userScale,
+            userOffsetX = userOffsetX,
+            userOffsetY = userOffsetY,
+        )
+    }
+
+    private fun restorePendingViewportAfterImageSwap() {
+        val pending = pendingViewportRestore ?: return
+        baseBind.image.post {
+            if (pendingViewportRestore !== pending) return@post
+
+            val zoomable = baseBind.image.zoomable
+            val dstBase = zoomable.baseTransformState.value
+            val dstBaseScale = dstBase.scaleX
+            if (dstBaseScale <= 0f) return@post
+
+            val dstFinalScale = pending.userScale * dstBaseScale
+            val dstFinalOffset = OffsetCompat(
+                x = pending.userOffsetX + dstBase.offset.x * pending.userScale,
+                y = pending.userOffsetY + dstBase.offset.y * pending.userScale,
+            )
+            viewLifecycleOwner.lifecycleScope.launch {
+                if (pendingViewportRestore !== pending) return@launch
+                zoomable.scale(dstFinalScale, animated = false)
+                zoomable.offset(dstFinalOffset, animated = false)
+                pendingViewportRestore = null
             }
         }
     }
