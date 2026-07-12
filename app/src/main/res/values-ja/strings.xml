@@ -682,6 +682,7 @@
     <string name="string_default_rembg_model">切り抜きモデル</string>
     <string name="string_ocr_model">OCR モデル</string>
     <string name="string_bubble_detector_model">吹き出し検出モデル</string>
+    <string name="string_translate_target_language">翻訳先</string>
     <string name="string_model_ready">ダウンロード済み</string>
     <string name="string_model_not_ready">未ダウンロード (%s)</string>
     <string name="string_not_set">未設定</string>

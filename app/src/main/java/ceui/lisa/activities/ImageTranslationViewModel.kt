@@ -9,6 +9,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ceui.lisa.R
+import ceui.lisa.activities.Shaft
 import ceui.lisa.utils.Common
 import ceui.loxia.asLiveData
 import ceui.pixiv.ui.translate.BubbleAreaFinder
@@ -20,7 +21,6 @@ import ceui.pixiv.ui.translate.TextEraser
 import ceui.pixiv.ui.translate.TextMask
 import ceui.pixiv.ui.translate.TextRenderer
 import ceui.pixiv.ui.translate.AiTranslatePhase
-import ceui.pixiv.ui.translate.appTranslateTargetLang
 import ceui.pixiv.ui.translate.currentTranslator
 import ceui.pixiv.ui.translate.promptTranslateFailedIfPossible
 import ceui.pixiv.ui.upscale.MangaOcr
@@ -210,7 +210,7 @@ class ImageTranslationViewModel : ViewModel() {
         try {
             currentTranslator().translateBatch(
                 inputs = regions.map { it.text },
-                outputLang = appTranslateTargetLang(),
+                outputLang = currentTargetLang(),
                 onItem = { i, translated -> translations[i] = translated },
                 onPhase = { phase -> postTranslatePhase(app, phase) },
                 onRequestSent = { aiRequestSent = true },
@@ -441,7 +441,7 @@ class ImageTranslationViewModel : ViewModel() {
         var out = ""
         currentTranslator().translateBatch(
             inputs = listOf(text),
-            outputLang = appTranslateTargetLang(),
+            outputLang = currentTargetLang(),
             onItem = { _, translated -> out = translated },
             onPhase = { phase -> postTranslatePhase(app, phase) },
             onRequestSent = { aiRequestSent = true },
@@ -460,6 +460,12 @@ class ImageTranslationViewModel : ViewModel() {
                 }
             )
         )
+    }
+
+    private fun currentTargetLang(): String {
+        return runCatching {
+            Shaft.sSettings.getMangaTranslateTargetLanguage()
+        }.getOrDefault("zh-CN")
     }
 
     /**

@@ -177,6 +177,7 @@ object SettingsCatalog {
         add(Entry(AI, "bubble_detector_model_rela", R.string.string_bubble_detector_model, keywords = "气泡 文本框 检测 漫画翻译 detector"))
         add(Entry(AI, "ocr_model_rela", R.string.string_ocr_model, keywords = "ocr 识别 文字 日文 漫画翻译"))
         add(Entry(AI, "ai_translate_rela", R.string.ai_translate_settings_title, R.string.ai_translate_settings_entry_desc, keywords = "翻译 自定义 接口 openai gpt deepseek sakura ollama llm api 评论翻译 漫画翻译 translate"))
+        add(Entry(AI, "manga_translate_target_language_rela", R.string.string_translate_target_language, keywords = "漫画翻译 目标语言 translate to english russian spanish french german portuguese italian japanese korean turkish chinese"))
 
         // 备份与缓存
         add(Entry(DATA, "backup_rela", R.string.string_420, keywords = "备份 导出 设置 json backup"))

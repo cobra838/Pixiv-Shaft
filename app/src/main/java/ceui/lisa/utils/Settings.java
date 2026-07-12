@@ -381,6 +381,9 @@ public class Settings {
     // 搜索页标签输入样式 0=v1 旧文本框 1=v2 当前标签 chip
     private int searchTagInputStyle = 1;
 
+    // 漫画翻译目标语言（Google 翻译 / 回填文案）默认简体中文
+    private String mangaTranslateTargetLanguage = "zh-CN";
+
     /** @deprecated legacy display-name language；仅供 AppLocalesBootstrap 一次性迁移读取，请使用 {@link ceui.pixiv.i18n.AppLocales}。 */
     @Deprecated
     public String getAppLanguage() {
@@ -594,6 +597,33 @@ public class Settings {
             searchTagInputStyle = 1;
         }
         this.searchTagInputStyle = searchTagInputStyle;
+    }
+
+    public String getMangaTranslateTargetLanguage() {
+        if (TextUtils.isEmpty(mangaTranslateTargetLanguage)) {
+            return "zh-CN";
+        }
+        switch (mangaTranslateTargetLanguage) {
+            case "zh-CN":
+            case "zh-TW":
+            case "en":
+            case "es":
+            case "fr":
+            case "de":
+            case "pt":
+            case "it":
+            case "ja":
+            case "ko":
+            case "ru":
+            case "tr":
+                return mangaTranslateTargetLanguage;
+            default:
+                return "zh-CN";
+        }
+    }
+
+    public void setMangaTranslateTargetLanguage(String mangaTranslateTargetLanguage) {
+        this.mangaTranslateTargetLanguage = mangaTranslateTargetLanguage;
     }
 
     public boolean isRelatedIllustNoLimit() {

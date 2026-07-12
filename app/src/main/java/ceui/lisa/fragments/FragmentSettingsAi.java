@@ -7,6 +7,8 @@ import com.qmuiteam.qmui.skin.QMUISkinManager;
 import com.qmuiteam.qmui.widget.dialog.QMUIDialog;
 import com.qmuiteam.qmui.widget.dialog.QMUIDialogAction;
 
+import java.util.Locale;
+
 import ceui.lisa.R;
 import ceui.lisa.activities.Shaft;
 import ceui.lisa.databinding.FragmentSettingsAiBinding;
@@ -15,6 +17,21 @@ import ceui.lisa.utils.Local;
 
 /** 设置 · AI 功能（超分/抠图/漫画翻译模型） */
 public class FragmentSettingsAi extends SettingsPageFragment<FragmentSettingsAiBinding> {
+
+    private static final String[] MANGA_TRANSLATE_TARGET_TAGS = new String[] {
+            "zh-CN",
+            "zh-TW",
+            "en",
+            "es",
+            "fr",
+            "de",
+            "pt",
+            "it",
+            "ja",
+            "ko",
+            "ru",
+            "tr",
+    };
 
     @Override
     public void initLayout() {
@@ -102,6 +119,27 @@ public class FragmentSettingsAi extends SettingsPageFragment<FragmentSettingsAiB
             intent.putExtra(ceui.lisa.activities.TemplateActivity.EXTRA_FRAGMENT, "自定义AI翻译");
             startActivity(intent);
         });
+
+        {
+            final String[] optionNames = buildMangaTranslateTargetLabels();
+            baseBind.mangaTranslateTargetLanguage.setText(
+                    optionNames[getMangaTranslateTargetIndex()]
+            );
+            baseBind.mangaTranslateTargetLanguageRela.setOnClickListener(v ->
+                    new QMUIDialog.CheckableDialogBuilder(mContext)
+                            .setCheckedIndex(getMangaTranslateTargetIndex())
+                            .setSkinManager(QMUISkinManager.defaultInstance(mContext))
+                            .addItems(optionNames, (dialog, which) -> {
+                                Shaft.sSettings.setMangaTranslateTargetLanguage(
+                                        MANGA_TRANSLATE_TARGET_TAGS[which]
+                                );
+                                Local.setSettings(Shaft.sSettings);
+                                baseBind.mangaTranslateTargetLanguage.setText(optionNames[which]);
+                                Common.showToast(R.string.operate_success);
+                                dialog.dismiss();
+                            })
+                            .show());
+        }
     }
 
     private void updateModelStatus() {
@@ -169,5 +207,38 @@ public class FragmentSettingsAi extends SettingsPageFragment<FragmentSettingsAiB
     public void onResume() {
         super.onResume();
         updateModelStatus();
+    }
+
+    private int getMangaTranslateTargetIndex() {
+        String saved = Shaft.sSettings.getMangaTranslateTargetLanguage();
+        for (int i = 0; i < MANGA_TRANSLATE_TARGET_TAGS.length; i++) {
+            if (MANGA_TRANSLATE_TARGET_TAGS[i].equalsIgnoreCase(saved)) {
+                return i;
+            }
+        }
+        return 0;
+    }
+
+    private String[] buildMangaTranslateTargetLabels() {
+        String[] labels = new String[MANGA_TRANSLATE_TARGET_TAGS.length];
+        Locale uiLocale = Locale.getDefault();
+        for (int i = 0; i < MANGA_TRANSLATE_TARGET_TAGS.length; i++) {
+            String tag = MANGA_TRANSLATE_TARGET_TAGS[i];
+            String displayTag;
+            if ("zh-CN".equalsIgnoreCase(tag)) {
+                displayTag = "zh-Hans";
+            } else if ("zh-TW".equalsIgnoreCase(tag)) {
+                displayTag = "zh-Hant";
+            } else {
+                displayTag = tag;
+            }
+            Locale target = Locale.forLanguageTag(displayTag);
+            String label = target.getDisplayName(uiLocale);
+            if (label == null || label.trim().isEmpty()) {
+                label = tag;
+            }
+            labels[i] = label;
+        }
+        return labels;
     }
 }

@@ -682,6 +682,7 @@
     <string name="string_default_rembg_model">배경 제거 모델</string>
     <string name="string_ocr_model">OCR 모델</string>
     <string name="string_bubble_detector_model">말풍선 검출 모델</string>
+    <string name="string_translate_target_language">번역 대상</string>
     <string name="string_model_ready">다운로드됨</string>
     <string name="string_model_not_ready">다운로드되지 않음 (%s)</string>
     <string name="string_not_set">미설정</string>

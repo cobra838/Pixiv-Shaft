@@ -682,6 +682,7 @@
     <string name="string_default_rembg_model">Модель удаления фона</string>
     <string name="string_ocr_model">OCR-модель</string>
     <string name="string_bubble_detector_model">Модель детектора комикс-облачков</string>
+    <string name="string_translate_target_language">Переводить на</string>
     <string name="string_model_ready">Загружено</string>
     <string name="string_model_not_ready">Не загружено (%s)</string>
     <string name="string_not_set">Не задано</string>
