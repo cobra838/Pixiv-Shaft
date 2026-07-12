@@ -1,4 +1,4 @@
-package ceui.lisa.fragments
+﻿package ceui.lisa.fragments
 
 import android.content.Intent
 import android.content.IntentFilter
@@ -58,6 +58,7 @@ import ceui.lisa.utils.Params
 import ceui.lisa.utils.PixivOperate
 import ceui.lisa.utils.SearchTypeUtil
 import ceui.lisa.utils.ShareIllust
+import ceui.lisa.utils.TagLongClickHelper
 import ceui.loxia.ObjectPool
 import ceui.loxia.ProgressTextButton
 import ceui.loxia.combineLatest
@@ -452,37 +453,14 @@ class FragmentIllust : SwipeFragment<FragmentIllustBinding>() {
         baseBind.illustTag.setOnTagLongClickListener { view, position, parent ->
             val tagBean = illust.tags[position]
             val tagName = tagBean.name
-            val searchEntity =
-                PixivOperate.getSearchHistory(tagName, SearchTypeUtil.SEARCH_TYPE_DB_KEYWORD)
-            val isPinned = searchEntity != null && searchEntity.isPinned
-            val tagMenuBuilder = MessageDialogBuilder(mContext)
-                .setTitle(tagName)
-                .setSkinManager(QMUISkinManager.defaultInstance(mContext))
-                .addAction(if (isPinned) getString(R.string.string_443) else getString(R.string.string_442)) { dialog, index ->
-                    val nextPinned = !isPinned
-                    val previewJson =
-                        if (nextPinned) buildPinnedTagPreviewJson(tagBean, illust) else null
-                    PixivOperate.insertPinnedSearchHistory(
-                        tagName, SearchTypeUtil.SEARCH_TYPE_DB_KEYWORD, nextPinned, previewJson
-                    )
-                    Common.showToast(R.string.operate_success)
-                    dialog.dismiss()
-                }
-                .addAction(getString(R.string.string_120)) { dialog, index ->
-                    Common.copy(mContext, tagName)
-                    dialog.dismiss()
-                }
-            // 同义词词典（issue #904）功能总开关：默认关闭，关闭时菜单与本功能存在之前完全一致
-            if (Shaft.sSettings.isSynonymDictEnabled) {
-                tagMenuBuilder.addAction(getString(R.string.synonym_add_as_synonym)) { dialog, index ->
-                    // 长按标签加入词典，备注自动填译文
-                    SynonymOperate.showAddAsSynonymDialog(mContext, tagName, tagBean.translated_name)
-                    dialog.dismiss()
-                }
+            TagLongClickHelper.showTagActions(mContext, tagName, tagBean.translated_name) { _, _, newPinned ->
+                val previewJson =
+                    if (newPinned) buildPinnedTagPreviewJson(tagBean, illust) else null
+                PixivOperate.insertPinnedSearchHistory(
+                    tagName, SearchTypeUtil.SEARCH_TYPE_DB_KEYWORD, newPinned, previewJson
+                )
+                Common.showToast(R.string.operate_success)
             }
-            val dialog = tagMenuBuilder.create()
-            dialog.show()
-            Common.enableQmuiDialogTextSelection(dialog)
             true
         }
     }

@@ -1,6 +1,5 @@
-package ceui.pixiv.widgets
+﻿package ceui.pixiv.widgets
 
-import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.text.InputType
@@ -16,22 +15,14 @@ import android.widget.TextView
 import androidx.appcompat.content.res.AppCompatResources
 import ceui.lisa.R
 import ceui.lisa.activities.SearchActivity
-import ceui.lisa.activities.Shaft
-import ceui.lisa.database.AppDatabase
 import ceui.lisa.models.TagsBean
-import ceui.lisa.utils.Common
-import ceui.lisa.utils.ClipBoardUtils
 import ceui.lisa.utils.Params
-import ceui.lisa.utils.PixivOperate
-import ceui.lisa.utils.SearchTypeUtil
+import ceui.lisa.utils.TagLongClickHelper
 import ceui.lisa.utils.V3Palette
 import ceui.loxia.Tag
-import ceui.pixiv.ui.synonym.SynonymOperate
 import ceui.pixiv.utils.ppppx
 import com.google.android.flexbox.AlignItems
 import com.google.android.flexbox.FlexboxLayout
-import com.hjq.toast.Toaster
-import com.qmuiteam.qmui.widget.dialog.QMUIDialog
 
 /**
  * V3 风格标签流 — 胶囊形背景 + `# name  译名` 格式 + 点击跳 SearchActivity。
@@ -416,88 +407,15 @@ class V3TagFlowView @JvmOverloads constructor(
     }
 
     private fun showTagActionMenu(name: String, translated: String?) {
-        val hasTranslation = !translated.isNullOrBlank()
-        // 顺序：原文 / 译文（可选）/ 固定（host 提供 onPinTag 才有）/ 添加为同义词 / 屏蔽
-        val labels = mutableListOf<String>()
-        val actions = mutableListOf<() -> Unit>()
-        labels.add(context.getString(R.string.v3_tag_menu_copy_original))
-        actions.add { copyToClipboard(name) }
-        if (hasTranslation) {
-            labels.add(context.getString(R.string.v3_tag_menu_copy_translation))
-            actions.add { copyToClipboard(translated!!) }
-        }
         val pinHandler = onPinTag
-        if (pinHandler != null) {
-            // 跟 FragmentIllust 长按 dialog 用同一对 string_442/443
-            val existing = PixivOperate.getSearchHistory(name, SearchTypeUtil.SEARCH_TYPE_DB_KEYWORD)
-            val pinned = existing != null && existing.isPinned
-            labels.add(
-                context.getString(if (pinned) R.string.string_443 else R.string.string_442)
-            )
-            actions.add { pinHandler.invoke(name, translated, !pinned) }
-        }
-        // 同义词词典（issue #904）：长按标签加入词典，备注自动填译文。
-        // 功能总开关默认关闭，关闭时菜单与本功能存在之前完全一致。
-        if (Shaft.sSettings.isSynonymDictEnabled) {
-            labels.add(context.getString(R.string.synonym_add_as_synonym))
-            actions.add {
-                SynonymOperate.showAddAsSynonymDialog(context, name, translated)
+        TagLongClickHelper.showTagActions(
+            context,
+            name,
+            translated,
+            if (pinHandler == null) null else { tagName, tagTranslated, newPinned ->
+                pinHandler.invoke(tagName, tagTranslated, newPinned)
             }
-        }
-        // 已屏蔽的 tag 给「取消屏蔽」而不是再屏蔽一次（issue #1003）——重复 muteTag 的
-        // REPLACE 会把「已屏蔽但未生效」的记录重置成生效，且用户无从在此解除屏蔽。
-        val alreadyMuted = AppDatabase.getAppDatabase(context).searchDao()
-            .getTagMuteEntityByID(name.hashCode()) != null
-        if (alreadyMuted) {
-            labels.add(context.getString(R.string.v3_tag_menu_unmute))
-            actions.add { unMuteTag(name, translated) }
-        } else {
-            labels.add(context.getString(R.string.v3_tag_menu_mute))
-            actions.add { muteTag(name, translated) }
-        }
-
-        // 标题写明按中的是哪个 tag（issue #1003：列表卡片的 chip 小，容易误按）。
-        // 原文译文都给，QMUI 标题不限行数，过长会换行不会截断。
-        val dialog = QMUIDialog.MenuDialogBuilder(context)
-            .setTitle(buildString {
-                append(name)
-                if (hasTranslation) {
-                    append("  "); append(translated)
-                }
-            })
-            .addItems(labels.toTypedArray()) { dialog, which ->
-                actions[which].invoke()
-                dialog.dismiss()
-            }
-            .create()
-        dialog.show()
-        Common.enableQmuiDialogTextSelection(dialog)
-    }
-
-    private fun copyToClipboard(text: String) {
-        if (ClipBoardUtils.setPrimaryClip(context, ClipData.newPlainText("pixiv-tag", text))) {
-            Toaster.showShort(R.string.has_copyed)
-        } else {
-            Toaster.showShort(R.string.msg_copy_failed)
-        }
-    }
-
-    private fun muteTag(name: String, translated: String?) {
-        val bean = TagsBean().apply {
-            this.name = name
-            this.translated_name = translated
-        }
-        PixivOperate.muteTag(bean)
-        Toaster.showShort(R.string.string_382)
-    }
-
-    private fun unMuteTag(name: String, translated: String?) {
-        val bean = TagsBean().apply {
-            this.name = name
-            this.translated_name = translated
-        }
-        PixivOperate.unMuteTag(bean, false)
-        Toaster.showShort(R.string.string_383)
+        )
     }
 
     private fun applyTouchScale(view: View, scale: Float) {
