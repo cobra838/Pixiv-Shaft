@@ -19,6 +19,7 @@ import ceui.lisa.activities.SearchActivity
 import ceui.lisa.activities.Shaft
 import ceui.lisa.database.AppDatabase
 import ceui.lisa.models.TagsBean
+import ceui.lisa.utils.Common
 import ceui.lisa.utils.ClipBoardUtils
 import ceui.lisa.utils.Params
 import ceui.lisa.utils.PixivOperate
@@ -457,7 +458,7 @@ class V3TagFlowView @JvmOverloads constructor(
 
         // 标题写明按中的是哪个 tag（issue #1003：列表卡片的 chip 小，容易误按）。
         // 原文译文都给，QMUI 标题不限行数，过长会换行不会截断。
-        QMUIDialog.MenuDialogBuilder(context)
+        val dialog = QMUIDialog.MenuDialogBuilder(context)
             .setTitle(buildString {
                 append(name)
                 if (hasTranslation) {
@@ -468,7 +469,9 @@ class V3TagFlowView @JvmOverloads constructor(
                 actions[which].invoke()
                 dialog.dismiss()
             }
-            .show()
+            .create()
+        dialog.show()
+        Common.enableQmuiDialogTextSelection(dialog)
     }
 
     private fun copyToClipboard(text: String) {

@@ -274,6 +274,7 @@ internal fun ArtworkV3Fragment.descRenderer() =
     feedRenderer<ArtworkDescItem, SectionV3DescriptionBinding>(
         inflate = SectionV3DescriptionBinding::inflate,
         fullSpan = true,
+        create = { cell -> Common.enableNativeTextSelection(cell.binding.description) },
         recycle = { cell -> clearPendingDescPreDraw(cell.binding) },
     ) { cell ->
         // HTML 解析对长 caption 不便宜;caption 不变(滚动来回重绑)就跳过重解析。

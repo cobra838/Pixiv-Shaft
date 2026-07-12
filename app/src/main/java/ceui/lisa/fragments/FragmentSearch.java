@@ -480,7 +480,7 @@ public class FragmentSearch extends BaseFragment<FragmentSearchBinding> {
     }
 
     private boolean showHistoryActionDialog(final SearchEntity searchEntity) {
-        new QMUIDialog.MessageDialogBuilder(mContext)
+        QMUIDialog historyDialog = new QMUIDialog.MessageDialogBuilder(mContext)
                 .setTitle(R.string.string_87)
                 .setMessage(searchEntity.getKeyword())
                 .setSkinManager(QMUISkinManager.defaultInstance(mActivity))
@@ -496,7 +496,9 @@ public class FragmentSearch extends BaseFragment<FragmentSearchBinding> {
                     Common.copy(mContext, searchEntity.getKeyword());
                     dialog.dismiss();
                 })
-                .show();
+                .create();
+        historyDialog.show();
+        Common.enableQmuiDialogTextSelection(historyDialog);
         return true;
     }
 

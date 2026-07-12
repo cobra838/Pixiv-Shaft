@@ -8,6 +8,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.OpenableColumns;
@@ -15,10 +16,12 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import com.blankj.utilcode.util.AppUtils;
 import com.blankj.utilcode.util.FileIOUtils;
@@ -277,6 +280,48 @@ public class Common {
             window.setWindowAnimations(R.style.dialog_animation_scale);
         }
         qmuiDialog.show();
+    }
+
+    public static void enableQmuiDialogTextSelection(QMUIDialog dialog) {
+        if (dialog == null) {
+            return;
+        }
+        enableNativeTextSelection(dialog.findViewById(com.qmuiteam.qmui.R.id.qmui_dialog_title_id));
+        enableNativeTextSelection(dialog.findViewById(com.qmuiteam.qmui.R.id.qmui_dialog_content_id));
+    }
+
+    public static void enableNativeTextSelection(View view) {
+        if (view == null) {
+            return;
+        }
+        if (view instanceof TextView) {
+            TextView textView = (TextView) view;
+            textView.setTextIsSelectable(true);
+            textView.setLongClickable(true);
+            textView.setHighlightColor(getReadableSelectionHighlightColor(textView.getCurrentTextColor()));
+            return;
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                enableNativeTextSelection(group.getChildAt(i));
+            }
+        }
+    }
+
+    public static void applyReadableSelectionHighlight(TextView textView) {
+        if (textView == null) {
+            return;
+        }
+        textView.setHighlightColor(getReadableSelectionHighlightColor(textView.getCurrentTextColor()));
+    }
+
+    private static int getReadableSelectionHighlightColor(int textColor) {
+        int red = Color.red(textColor);
+        int green = Color.green(textColor);
+        int blue = Color.blue(textColor);
+        double luminance = (0.299d * red + 0.587d * green + 0.114d * blue) / 255.0d;
+        return luminance > 0.55d ? Color.argb(150, 0, 0, 0) : Color.argb(150, 255, 255, 255);
     }
 
     public static String getResponseBody(Response response) {

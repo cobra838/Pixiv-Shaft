@@ -98,6 +98,7 @@
                 android:letterSpacing="0.01"
                 android:lineSpacingMultiplier="1.35"
                 android:textColor="@color/v3_text_1"
+                android:textIsSelectable="true"
                 android:textSize="15sp"
                 tools:text="这是一条评论内容，写得挺长的一段话用来测试换行和行距效果。" />
 

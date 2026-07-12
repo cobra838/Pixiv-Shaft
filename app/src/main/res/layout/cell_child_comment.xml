@@ -89,6 +89,7 @@
             android:letterSpacing="0.01"
             android:lineSpacingMultiplier="1.3"
             android:textColor="@color/v3_text_2"
+            android:textIsSelectable="true"
             android:textSize="14sp"
             tools:text="这是一条回复内容。" />
 

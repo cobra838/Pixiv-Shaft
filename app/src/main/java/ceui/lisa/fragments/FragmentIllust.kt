@@ -484,7 +484,9 @@ class FragmentIllust : SwipeFragment<FragmentIllustBinding>() {
                     dialog.dismiss()
                 }
             }
-            tagMenuBuilder.create().show()
+            val dialog = tagMenuBuilder.create()
+            dialog.show()
+            Common.enableQmuiDialogTextSelection(dialog)
             true
         }
     }

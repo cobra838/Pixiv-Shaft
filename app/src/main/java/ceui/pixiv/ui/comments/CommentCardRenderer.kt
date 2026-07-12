@@ -9,6 +9,7 @@ import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
 import ceui.lisa.R
 import ceui.lisa.databinding.CellCommentBinding
+import ceui.lisa.utils.Common
 import ceui.lisa.utils.GlideUrlChild
 import ceui.lisa.utils.V3Palette
 import ceui.loxia.DateParse
@@ -81,6 +82,7 @@ fun CommentsFragment.commentCardRenderer(): FeedRenderer<CommentFeedItem, CellCo
                         ?.onClickDeleteComment(sender, item.comment, 0L)
                 }
             }
+            Common.applyReadableSelectionHighlight(binding.commentContent)
         },
         recycle = { cell ->
             cell.binding.userIcon.clearGlideOnRecycle()

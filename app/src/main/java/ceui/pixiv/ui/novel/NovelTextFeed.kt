@@ -607,6 +607,7 @@ fun novelCaptionRenderer(
         fullSpan = true,
         create = { cell ->
             cell.binding.lifecycleOwner = lifecycleOwner
+            Common.applyReadableSelectionHighlight(cell.binding.caption)
             cell.binding.captionToggle.setOnClick {
                 collapse.expanded = !collapse.expanded
                 applyNovelCaptionCollapse(cell.binding, collapse)
@@ -621,7 +622,6 @@ fun novelCaptionRenderer(
         },
     ) { cell ->
         val b = cell.binding
-        val ctx = b.root.context
         val liveNovel = ObjectPool.get<Novel>(cell.item.novelId)
         b.novel = liveNovel
         slots.getOrPut(cell) { CellObserverSlot(lifecycleOwner) }.rebind(liveNovel) { novel ->
@@ -663,12 +663,6 @@ fun novelCaptionRenderer(
                 // issue #1005: 超长简介折叠（对齐插画详情 #965），全文存进 collapse 供展开回填
                 collapse.full = HtmlCompat.fromHtml(normalizedCaption, HtmlCompat.FROM_HTML_MODE_COMPACT)
                 applyNovelCaptionCollapse(b, collapse)
-                b.caption.setOnClick {
-                    if (linkHandler.wasLinkClicked) return@setOnClick
-                    val plain = HtmlCompat.fromHtml(normalizedCaption, HtmlCompat.FROM_HTML_MODE_COMPACT)
-                        .toString().trim()
-                    Common.copy(ctx, plain)
-                }
             } else {
                 b.caption.isVisible = false
                 collapse.full = null

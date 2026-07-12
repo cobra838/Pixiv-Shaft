@@ -8,6 +8,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import ceui.lisa.R
 import ceui.lisa.databinding.CellChildCommentBinding
+import ceui.lisa.utils.Common
 import ceui.lisa.utils.GlideUrlChild
 import ceui.loxia.Comment
 import ceui.loxia.DateParse
@@ -64,6 +65,10 @@ class ChildCommentAdapter : ListAdapter<ChildCommentItem, ChildCommentViewHolder
 class ChildCommentViewHolder(
     private val binding: CellChildCommentBinding
 ) : RecyclerView.ViewHolder(binding.root) {
+
+    init {
+        Common.applyReadableSelectionHighlight(binding.commentContent)
+    }
 
     fun bind(item: ChildCommentItem) {
         val comment = item.comment
