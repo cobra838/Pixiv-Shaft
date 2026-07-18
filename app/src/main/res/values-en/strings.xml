@@ -683,6 +683,8 @@
     <string name="string_ocr_model">OCR model</string>
     <string name="string_bubble_detector_model">Bubble Detector Model</string>
     <string name="string_translate_target_language">Translate to</string>
+    <string name="string_translate_source_language">Translate from</string>
+    <string name="string_translate_source_auto">Auto detect</string>
     <string name="string_model_ready">Downloaded</string>
     <string name="string_model_not_ready">Not downloaded (%s)</string>
     <string name="string_not_set">Not set</string>

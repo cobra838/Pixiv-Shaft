@@ -24,6 +24,8 @@ import ceui.lisa.fragments.FragmentImageDetail
 import ceui.lisa.helper.PageTransformerHelper
 import ceui.lisa.models.IllustsBean
 import ceui.lisa.utils.Common
+import ceui.lisa.utils.Local
+import ceui.lisa.utils.MangaTranslateLanguageHelper
 import ceui.lisa.utils.Params
 import ceui.lisa.utils.PixivOperate
 import ceui.lisa.utils.QMUIMenuPopup
@@ -165,6 +167,12 @@ class ImageDetailActivity : BaseActivity<ActivityImageDetailBinding?>() {
                 }
                 actions += getString(R.string.string_ai_manga_translate_manual) to {
                     performAiMangaTranslateManual(illust, baseBind!!.viewPager.currentItem)
+                }
+                actions += getString(R.string.string_translate_source_language) to {
+                    showMangaTranslateSourceLanguagePicker()
+                }
+                actions += getString(R.string.string_translate_target_language) to {
+                    showMangaTranslateTargetLanguagePicker()
                 }
                 actions += getString(R.string.string_set_wallpaper) to {
                     performSetWallpaper(illust, baseBind!!.viewPager.currentItem)
@@ -618,6 +626,49 @@ class ImageDetailActivity : BaseActivity<ActivityImageDetailBinding?>() {
             return
         }
         translationViewModel.requestManualSelection(pageIndex)
+    }
+
+    private fun showMangaTranslateSourceLanguagePicker() {
+        showMangaTranslateLanguagePicker(
+            titleRes = R.string.string_translate_source_language,
+            tags = MangaTranslateLanguageHelper.SOURCE_TAGS,
+            currentTag = Shaft.sSettings.getMangaTranslateSourceLanguage(),
+            fallbackIndex = 1,
+        ) { tag ->
+            Shaft.sSettings.setMangaTranslateSourceLanguage(tag)
+        }
+    }
+
+    private fun showMangaTranslateTargetLanguagePicker() {
+        showMangaTranslateLanguagePicker(
+            titleRes = R.string.string_translate_target_language,
+            tags = MangaTranslateLanguageHelper.TARGET_TAGS,
+            currentTag = Shaft.sSettings.getMangaTranslateTargetLanguage(),
+            fallbackIndex = 0,
+        ) { tag ->
+            Shaft.sSettings.setMangaTranslateTargetLanguage(tag)
+        }
+    }
+
+    private fun showMangaTranslateLanguagePicker(
+        titleRes: Int,
+        tags: Array<String>,
+        currentTag: String,
+        fallbackIndex: Int,
+        onSelected: (String) -> Unit,
+    ) {
+        val labels = MangaTranslateLanguageHelper.buildLabels(this, tags)
+        QMUIDialog.CheckableDialogBuilder(this)
+            .setTitle(titleRes)
+            .setCheckedIndex(MangaTranslateLanguageHelper.indexOf(tags, currentTag, fallbackIndex))
+            .setSkinManager(QMUISkinManager.defaultInstance(this))
+            .addItems(labels) { dialog, which ->
+                onSelected(tags[which])
+                Local.setSettings(Shaft.sSettings)
+                Common.showToast(R.string.operate_success)
+                dialog.dismiss()
+            }
+            .show()
     }
 
     /**

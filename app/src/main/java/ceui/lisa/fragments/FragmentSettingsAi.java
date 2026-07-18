@@ -7,31 +7,15 @@ import com.qmuiteam.qmui.skin.QMUISkinManager;
 import com.qmuiteam.qmui.widget.dialog.QMUIDialog;
 import com.qmuiteam.qmui.widget.dialog.QMUIDialogAction;
 
-import java.util.Locale;
-
 import ceui.lisa.R;
 import ceui.lisa.activities.Shaft;
 import ceui.lisa.databinding.FragmentSettingsAiBinding;
 import ceui.lisa.utils.Common;
 import ceui.lisa.utils.Local;
+import ceui.lisa.utils.MangaTranslateLanguageHelper;
 
 /** 设置 · AI 功能（超分/抠图/漫画翻译模型） */
 public class FragmentSettingsAi extends SettingsPageFragment<FragmentSettingsAiBinding> {
-
-    private static final String[] MANGA_TRANSLATE_TARGET_TAGS = new String[] {
-            "zh-CN",
-            "zh-TW",
-            "en",
-            "es",
-            "fr",
-            "de",
-            "pt",
-            "it",
-            "ja",
-            "ko",
-            "ru",
-            "tr",
-    };
 
     @Override
     public void initLayout() {
@@ -121,7 +105,32 @@ public class FragmentSettingsAi extends SettingsPageFragment<FragmentSettingsAiB
         });
 
         {
-            final String[] optionNames = buildMangaTranslateTargetLabels();
+            final String[] sourceNames = MangaTranslateLanguageHelper.buildLabels(
+                    mContext,
+                    MangaTranslateLanguageHelper.SOURCE_TAGS
+            );
+            baseBind.mangaTranslateSourceLanguage.setText(
+                    sourceNames[getMangaTranslateSourceIndex()]
+            );
+            baseBind.mangaTranslateSourceLanguageRela.setOnClickListener(v ->
+                    new QMUIDialog.CheckableDialogBuilder(mContext)
+                            .setCheckedIndex(getMangaTranslateSourceIndex())
+                            .setSkinManager(QMUISkinManager.defaultInstance(mContext))
+                            .addItems(sourceNames, (dialog, which) -> {
+                                Shaft.sSettings.setMangaTranslateSourceLanguage(
+                                        MangaTranslateLanguageHelper.SOURCE_TAGS[which]
+                                );
+                                Local.setSettings(Shaft.sSettings);
+                                baseBind.mangaTranslateSourceLanguage.setText(sourceNames[which]);
+                                Common.showToast(R.string.operate_success);
+                                dialog.dismiss();
+                            })
+                            .show());
+
+            final String[] optionNames = MangaTranslateLanguageHelper.buildLabels(
+                    mContext,
+                    MangaTranslateLanguageHelper.TARGET_TAGS
+            );
             baseBind.mangaTranslateTargetLanguage.setText(
                     optionNames[getMangaTranslateTargetIndex()]
             );
@@ -131,7 +140,7 @@ public class FragmentSettingsAi extends SettingsPageFragment<FragmentSettingsAiB
                             .setSkinManager(QMUISkinManager.defaultInstance(mContext))
                             .addItems(optionNames, (dialog, which) -> {
                                 Shaft.sSettings.setMangaTranslateTargetLanguage(
-                                        MANGA_TRANSLATE_TARGET_TAGS[which]
+                                        MangaTranslateLanguageHelper.TARGET_TAGS[which]
                                 );
                                 Local.setSettings(Shaft.sSettings);
                                 baseBind.mangaTranslateTargetLanguage.setText(optionNames[which]);
@@ -210,35 +219,18 @@ public class FragmentSettingsAi extends SettingsPageFragment<FragmentSettingsAiB
     }
 
     private int getMangaTranslateTargetIndex() {
-        String saved = Shaft.sSettings.getMangaTranslateTargetLanguage();
-        for (int i = 0; i < MANGA_TRANSLATE_TARGET_TAGS.length; i++) {
-            if (MANGA_TRANSLATE_TARGET_TAGS[i].equalsIgnoreCase(saved)) {
-                return i;
-            }
-        }
-        return 0;
+        return MangaTranslateLanguageHelper.indexOf(
+                MangaTranslateLanguageHelper.TARGET_TAGS,
+                Shaft.sSettings.getMangaTranslateTargetLanguage(),
+                0
+        );
     }
 
-    private String[] buildMangaTranslateTargetLabels() {
-        String[] labels = new String[MANGA_TRANSLATE_TARGET_TAGS.length];
-        Locale uiLocale = Locale.getDefault();
-        for (int i = 0; i < MANGA_TRANSLATE_TARGET_TAGS.length; i++) {
-            String tag = MANGA_TRANSLATE_TARGET_TAGS[i];
-            String displayTag;
-            if ("zh-CN".equalsIgnoreCase(tag)) {
-                displayTag = "zh-Hans";
-            } else if ("zh-TW".equalsIgnoreCase(tag)) {
-                displayTag = "zh-Hant";
-            } else {
-                displayTag = tag;
-            }
-            Locale target = Locale.forLanguageTag(displayTag);
-            String label = target.getDisplayName(uiLocale);
-            if (label == null || label.trim().isEmpty()) {
-                label = tag;
-            }
-            labels[i] = label;
-        }
-        return labels;
+    private int getMangaTranslateSourceIndex() {
+        return MangaTranslateLanguageHelper.indexOf(
+                MangaTranslateLanguageHelper.SOURCE_TAGS,
+                Shaft.sSettings.getMangaTranslateSourceLanguage(),
+                1
+        );
     }
 }

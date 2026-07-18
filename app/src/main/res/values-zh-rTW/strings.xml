@@ -685,6 +685,8 @@
     <string name="string_ocr_model">OCR 模型</string>
     <string name="string_bubble_detector_model">氣泡偵測模型</string>
     <string name="string_translate_target_language">翻譯到</string>
+    <string name="string_translate_source_language">翻譯自</string>
+    <string name="string_translate_source_auto">自動偵測</string>
     <string name="string_model_ready">已下載</string>
     <string name="string_model_not_ready">尚未下載 (%s)</string>
     <string name="string_not_set">未設定</string>

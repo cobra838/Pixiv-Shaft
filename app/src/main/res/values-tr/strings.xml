@@ -683,6 +683,8 @@
     <string name="string_ocr_model">OCR modeli</string>
     <string name="string_bubble_detector_model">Balon Algılama Modeli</string>
     <string name="string_translate_target_language">Şuna çevir</string>
+    <string name="string_translate_source_language">Şundan çevir</string>
+    <string name="string_translate_source_auto">Otomatik algıla</string>
     <string name="string_model_ready">İndirildi</string>
     <string name="string_model_not_ready">İndirilmedi (%s)</string>
     <string name="string_not_set">Ayarlanmadı</string>

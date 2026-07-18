@@ -15,6 +15,7 @@ import ceui.loxia.asLiveData
 import ceui.pixiv.ui.translate.BubbleAreaFinder
 import ceui.pixiv.ui.translate.ComicTextDetector
 import ceui.pixiv.ui.translate.ComicTextDetectorModel
+import ceui.pixiv.ui.translate.GoogleWebTranslator
 import ceui.pixiv.ui.translate.MangaOcrModel
 import ceui.pixiv.ui.translate.MangaOcrRecognizer
 import ceui.pixiv.ui.translate.TextEraser
@@ -208,12 +209,10 @@ class ImageTranslationViewModel : ViewModel() {
         _status.postValue(Status(app.getString(R.string.ocr_translating)))
         val translations = mutableMapOf<Int, String>()
         try {
-            currentTranslator().translateBatch(
+            translateMangaBatch(
                 inputs = regions.map { it.text },
-                outputLang = currentTargetLang(),
+                app = app,
                 onItem = { i, translated -> translations[i] = translated },
-                onPhase = { phase -> postTranslatePhase(app, phase) },
-                onRequestSent = { aiRequestSent = true },
             )
         } catch (e: CancellationException) {
             // 离开页面/重新进入导致协程取消:重抛,别把「Job was cancelled」当真实错误弹给用户
@@ -439,12 +438,10 @@ class ImageTranslationViewModel : ViewModel() {
 
     private suspend fun translateSingle(text: String, app: Context): String {
         var out = ""
-        currentTranslator().translateBatch(
+        translateMangaBatch(
             inputs = listOf(text),
-            outputLang = currentTargetLang(),
+            app = app,
             onItem = { _, translated -> out = translated },
-            onPhase = { phase -> postTranslatePhase(app, phase) },
-            onRequestSent = { aiRequestSent = true },
         )
         return out
     }
@@ -466,6 +463,36 @@ class ImageTranslationViewModel : ViewModel() {
         return runCatching {
             Shaft.sSettings.getMangaTranslateTargetLanguage()
         }.getOrDefault("zh-CN")
+    }
+
+    private fun currentSourceLang(): String {
+        return runCatching {
+            Shaft.sSettings.getMangaTranslateSourceLanguage()
+        }.getOrDefault("ja")
+    }
+
+    private suspend fun translateMangaBatch(
+        inputs: List<String>,
+        app: Context,
+        onItem: (Int, String) -> Unit,
+    ): List<String> {
+        val translator = currentTranslator()
+        return if (translator === GoogleWebTranslator) {
+            GoogleWebTranslator.translateBatch(
+                inputs = inputs,
+                sourceLang = currentSourceLang(),
+                outputLang = currentTargetLang(),
+                onItem = onItem,
+            )
+        } else {
+            translator.translateBatch(
+                inputs = inputs,
+                outputLang = currentTargetLang(),
+                onItem = onItem,
+                onPhase = { phase -> postTranslatePhase(app, phase) },
+                onRequestSent = { aiRequestSent = true },
+            )
+        }
     }
 
     /**

@@ -176,6 +176,26 @@
                 </RelativeLayout>
 
                 <RelativeLayout
+                    android:id="@+id/manga_translate_source_language_rela"
+                    style="@style/M3SetRow"
+                    android:background="@drawable/bg_m3_row_mid">
+
+                    <LinearLayout
+                        style="@style/M3SetTexts"
+                        android:layout_marginEnd="130dp">
+
+                        <TextView
+                            style="@style/M3SetTitle"
+                            android:text="@string/string_translate_source_language" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/manga_translate_source_language"
+                        style="@style/M3SetValue" />
+
+                </RelativeLayout>
+
+                <RelativeLayout
                     android:id="@+id/manga_translate_target_language_rela"
                     style="@style/M3SetRow"
                     android:background="@drawable/bg_m3_row_bottom">
