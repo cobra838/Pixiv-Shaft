@@ -293,6 +293,7 @@ dependencies {
     implementation("com.google.android.flexbox:flexbox:3.0.0")
 
     implementation("io.github.panpf.zoomimage:zoomimage-view-sketch4:1.4.0")
+    implementation 'com.google.mlkit:text-recognition:16.0.1'
 
     implementation("me.zhanghai.android.fastscroll:library:1.2.0")
 

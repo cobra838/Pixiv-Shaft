@@ -28,13 +28,20 @@ import ceui.pixiv.ui.upscale.MangaOcr
 import ceui.pixiv.ui.upscale.OcrTextRegion
 import ceui.pixiv.ui.upscale.scaledBy
 import kotlinx.coroutines.CancellationException
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlin.math.roundToInt
 
 /**
  * 二级详情「翻译漫画」一站式 pipeline:OCR → Google batch 翻译 → 译文回填到原图气泡位置 →
@@ -307,7 +314,10 @@ class ImageTranslationViewModel : ViewModel() {
         ocrModel: MangaOcrModel,
     ) {
         // 1. 只需 manga-ocr 模型(CTD 仅自动检测用),按需加载
-        if (!MangaOcrRecognizer.isLoaded) {
+        val sourceLang = currentSourceLang()
+        val useMangaOcr = sourceLang.equals("ja", ignoreCase = true)
+
+        if (useMangaOcr && !MangaOcrRecognizer.isLoaded) {
             _status.postValue(Status(app.getString(R.string.string_ai_ocr_loading_model)))
             val ok = withContext(Dispatchers.IO) {
                 runCatching { MangaOcrRecognizer.loadModel(app, ocrModel) }
@@ -328,7 +338,7 @@ class ImageTranslationViewModel : ViewModel() {
         _status.postValue(Status(app.getString(R.string.string_ai_manga_manual_recognizing)))
         val ocr = withContext(Dispatchers.IO) {
             try {
-                recognizeManualRegion(baseFile, l, t, r, b)
+                recognizeManualRegion(baseFile, l, t, r, b, useMangaOcr)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -390,7 +400,14 @@ class ImageTranslationViewModel : ViewModel() {
      * crop 出来喂 manga-ocr。region 直接构造在「底图像素坐标系」下,后续擦/填都在这套坐标里,
      * 不再有 sample 还原那一层。框太小 / 解码失败返回 null。
      */
-    private suspend fun recognizeManualRegion(file: File, l: Float, t: Float, r: Float, b: Float): ManualOcr? {
+    private suspend fun recognizeManualRegion(
+        file: File,
+        l: Float,
+        t: Float,
+        r: Float,
+        b: Float,
+        useMangaOcr: Boolean,
+    ): ManualOcr? {
         val base = decodeSampled(file, MAX_RENDER_SHORT_SIDE) ?: return null
         var keep = false
         try {
@@ -406,14 +423,40 @@ class ImageTranslationViewModel : ViewModel() {
 
             // createBitmap 在「子区域==整图且 base 不可变」时会直接返回 base 本身;
             // 此时绝不能 recycle,否则把底图也回收了,后续 eraseText 直接挂。
-            val crop = Bitmap.createBitmap(base, x0, y0, rw, rh)
-            val result = try {
-                MangaOcrRecognizer.recognize(crop)
+            val padX = maxOf(MIN_MANUAL_OCR_PADDING_PX, (rw * MANUAL_OCR_PADDING_RATIO).roundToInt())
+            val padY = maxOf(MIN_MANUAL_OCR_PADDING_PX, (rh * MANUAL_OCR_PADDING_RATIO).roundToInt())
+            val cropX0 = (x0 - padX).coerceAtLeast(0)
+            val cropY0 = (y0 - padY).coerceAtLeast(0)
+            val cropX1 = (x1 + padX).coerceAtMost(w)
+            val cropY1 = (y1 + padY).coerceAtMost(h)
+
+            val crop = Bitmap.createBitmap(base, cropX0, cropY0, cropX1 - cropX0, cropY1 - cropY0)
+            val text: String
+            val confidence: Float
+            try {
+                if (useMangaOcr) {
+                    val result = MangaOcrRecognizer.recognize(crop)
+                    text = result.text.trim()
+                    confidence = result.confidence
+                } else {
+                    text = recognizeLatinText(crop).trim()
+                    confidence = 1f
+                }
             } finally {
                 if (crop !== base) crop.recycle()
             }
+            Timber.d(
+                "ManualOcr: -> [%s] conf=%.2f selected=%dx%d crop=%dx%d",
+                text,
+                confidence,
+                rw,
+                rh,
+                cropX1 - cropX0,
+                cropY1 - cropY0,
+            )
+            if (text.isBlank()) return null
             val region = OcrTextRegion(
-                text = result.text,
+                text = text,
                 cx = x0 + rw / 2f,
                 cy = y0 + rh / 2f,
                 width = rw.toFloat(),
@@ -427,12 +470,33 @@ class ImageTranslationViewModel : ViewModel() {
                     x1.toFloat() to y1.toFloat(),
                     x0.toFloat() to y1.toFloat(),
                 ),
-                recogConfidence = result.confidence,
+                recogConfidence = confidence,
             )
             keep = true
-            return ManualOcr(base, region, result.text.trim())
+            return ManualOcr(base, region, text)
         } finally {
             if (!keep) base.recycle()
+        }
+    }
+
+    private suspend fun recognizeLatinText(bitmap: Bitmap): String {
+        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+        val image = InputImage.fromBitmap(bitmap, 0)
+        return suspendCancellableCoroutine { cont ->
+            recognizer.process(image)
+                .addOnSuccessListener { result ->
+                    recognizer.close()
+                    if (cont.isActive) {
+                        cont.resume(result.text)
+                    }
+                }
+                .addOnFailureListener { error ->
+                    recognizer.close()
+                    if (cont.isActive) {
+                        cont.resumeWithException(error)
+                    }
+                }
+            cont.invokeOnCancellation { recognizer.close() }
         }
     }
 
@@ -678,6 +742,9 @@ class ImageTranslationViewModel : ViewModel() {
 
         /** 圈选框换算到底图像素后的最小边长,低于此判为误触/空框。 */
         private const val MIN_MANUAL_REGION_PX = 8
+
+        private const val MANUAL_OCR_PADDING_RATIO = 0.08f
+        private const val MIN_MANUAL_OCR_PADDING_PX = 8
     }
 }
 
