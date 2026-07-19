@@ -317,10 +317,6 @@ class FragmentIllust : SwipeFragment<FragmentIllustBinding>() {
         } else {
             baseBind.title.text = illust.title
         }
-        baseBind.title.setOnLongClickListener {
-            Common.copy(mContext, illust.title)
-            true
-        }
     }
 
     private fun setupToolbarMenu(illust: IllustsBean) {
