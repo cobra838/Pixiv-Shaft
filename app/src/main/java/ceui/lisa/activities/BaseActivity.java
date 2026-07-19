@@ -157,6 +157,9 @@ public abstract class BaseActivity<Layout extends ViewDataBinding> extends AppCo
                 }
                 if (dx >= edgeSwipeTriggerDistance && dx > dy * 1.5f) {
                     edgeSwipeTriggered = true;
+                    if (onGlobalSwipeBackRequested()) {
+                        return true;
+                    }
                     onBackPressed();
                     return true;
                 }
@@ -176,6 +179,10 @@ public abstract class BaseActivity<Layout extends ViewDataBinding> extends AppCo
                 && Shaft.sSettings.isGlobalSwipeBack()
                 && !(this instanceof MainActivity)
                 && !isFinishing();
+    }
+
+    protected boolean onGlobalSwipeBackRequested() {
+        return false;
     }
 
 

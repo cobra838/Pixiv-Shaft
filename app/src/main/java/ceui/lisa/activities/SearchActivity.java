@@ -561,6 +561,11 @@ public class SearchActivity extends BaseActivity<FragmentNewSearchBinding> {
         return hadHints || hadFocus || canceledChipEditing;
     }
 
+    @Override
+    protected boolean onGlobalSwipeBackRequested() {
+        return dismissTransientSearchUi();
+    }
+
     private EditText getActiveSearchInput() {
         return useChipInputMode() ? baseBind.searchTagsFlow.getEditor() : baseBind.searchKeywordBox;
     }

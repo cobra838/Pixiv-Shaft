@@ -414,6 +414,13 @@ class FragmentImageDetail : BaseFragment<FragmentImageDetailBinding?>() {
         }.start()
     }
 
+    fun consumeManualSelectionBack(): Boolean {
+        val overlay = baseBind?.manualSelectionOverlay ?: return false
+        if (overlay.visibility != View.VISIBLE) return false
+        exitManualSelection()
+        return true
+    }
+
     /**
      * 把框选层吐回的「View 坐标系矩形」用 zoomimage 的 transform 换算成「内容坐标」,
      * 再除以 contentSize 归一化到 [0,1] —— 这样与显示图实际分辨率、当前缩放都无关,

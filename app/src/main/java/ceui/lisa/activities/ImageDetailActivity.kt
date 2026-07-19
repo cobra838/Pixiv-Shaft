@@ -436,6 +436,7 @@ class ImageDetailActivity : BaseActivity<ActivityImageDetailBinding?>() {
         // 系统不再回调 onBackPressed,必须用 OnBackPressedDispatcher 接管。
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                if (consumeCurrentManualSelection()) return
                 if (maybeConfirmAiExit()) return
                 finishViewer()
             }
@@ -489,6 +490,17 @@ class ImageDetailActivity : BaseActivity<ActivityImageDetailBinding?>() {
             translationViewModel.cancelActiveWorkflow()
         }
         super.onDestroy()
+    }
+
+    override fun onGlobalSwipeBackRequested(): Boolean {
+        return consumeCurrentManualSelection()
+    }
+
+    private fun consumeCurrentManualSelection(): Boolean {
+        val pager = baseBind?.viewPager ?: return false
+        val tag = "android:switcher:${pager.id}:${pager.currentItem}"
+        return (supportFragmentManager.findFragmentByTag(tag) as? FragmentImageDetail)
+            ?.consumeManualSelectionBack() == true
     }
 
     private fun performAiRembg(illust: IllustsBean, pageIndex: Int, model: RembgModel) {
