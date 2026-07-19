@@ -3,7 +3,7 @@ package ceui.pixiv.ui.novel.reader.render
 import android.content.Context
 import android.graphics.Color
 import android.text.Spannable
-import android.text.SpannableString
+import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.BackgroundColorSpan
 import android.text.style.ClickableSpan
@@ -16,6 +16,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
@@ -125,7 +126,8 @@ class NovelScrollReaderView(context: Context) : RecyclerView(context) {
             geometry.paddingBottom.toInt(),
         )
         clipToPadding = false
-        val adapter = ContentAdapter(tokens, style, geometry, imageResolver)
+        val items = buildScrollItems(tokens)
+        val adapter = ContentAdapter(items, style, geometry, imageResolver)
         contentAdapter = adapter
         setAdapter(adapter)
     }
@@ -151,10 +153,10 @@ class NovelScrollReaderView(context: Context) : RecyclerView(context) {
     }
 
     fun currentCharIndex(): Int {
-        val toks = contentAdapter?.tokens ?: return 0
+        val items = contentAdapter?.items ?: return 0
         val pos = lm.findFirstVisibleItemPosition()
         if (pos == RecyclerView.NO_POSITION) return 0
-        return anchorCharOf(toks[pos.coerceIn(0, toks.lastIndex)])
+        return anchorCharOf(items[pos.coerceIn(0, items.lastIndex)])
     }
 
     fun scrollByPage(forward: Boolean) {
@@ -201,16 +203,50 @@ class NovelScrollReaderView(context: Context) : RecyclerView(context) {
     private fun anchorCharOf(token: ContentToken): Int =
         if (token is ContentToken.Paragraph) token.textSourceStart else token.sourceStart
 
+    private fun anchorCharOf(item: ScrollItem): Int = when (item) {
+        is ScrollItem.TextGroup -> item.paragraphs.firstOrNull()?.textSourceStart ?: item.sourceStart
+        is ScrollItem.Single -> anchorCharOf(item.token)
+    }
+
     /** Last token whose anchor char is <= [charIndex]. Anchors are monotonic
      *  in source order, so we can stop at the first one that overshoots. */
     private fun positionForCharIndex(charIndex: Int): Int? {
-        val toks = contentAdapter?.tokens ?: return null
-        if (toks.isEmpty()) return null
+        val items = contentAdapter?.items ?: return null
+        if (items.isEmpty()) return null
         var target = 0
-        for (i in toks.indices) {
-            if (anchorCharOf(toks[i]) <= charIndex) target = i else break
+        for (i in items.indices) {
+            if (anchorCharOf(items[i]) <= charIndex) target = i else break
         }
         return target
+    }
+
+    private fun buildScrollItems(tokens: List<ContentToken>): List<ScrollItem> {
+        val out = ArrayList<ScrollItem>(tokens.size)
+        val group = ArrayList<ContentToken.Paragraph>()
+        var groupChars = 0
+
+        fun flushGroup() {
+            if (group.isNotEmpty()) {
+                out += ScrollItem.TextGroup(group.toList())
+                group.clear()
+                groupChars = 0
+            }
+        }
+
+        for (token in tokens) {
+            if (token is ContentToken.Paragraph) {
+                val wouldOverflow = group.isNotEmpty() &&
+                        (group.size >= MAX_TEXT_GROUP_PARAGRAPHS || groupChars + token.text.length > MAX_TEXT_GROUP_CHARS)
+                if (wouldOverflow) flushGroup()
+                group += token
+                groupChars += token.text.length
+            } else {
+                flushGroup()
+                out += ScrollItem.Single(token)
+            }
+        }
+        flushGroup()
+        return out
     }
 
     private fun reportScrollProgress() {
@@ -227,7 +263,7 @@ class NovelScrollReaderView(context: Context) : RecyclerView(context) {
     // ---- Adapter -----------------------------------------------------------
 
     private inner class ContentAdapter(
-        val tokens: List<ContentToken>,
+        val items: List<ScrollItem>,
         val style: TypeStyle,
         val geometry: PageGeometry,
         val imageResolver: (ContentToken) -> String?,
@@ -235,16 +271,19 @@ class NovelScrollReaderView(context: Context) : RecyclerView(context) {
 
         var searchHits: List<HighlightRange> = emptyList()
 
-        override fun getItemCount(): Int = tokens.size
+        override fun getItemCount(): Int = items.size
 
-        override fun getItemViewType(position: Int): Int = when (tokens[position]) {
-            is ContentToken.Paragraph -> TYPE_PARAGRAPH
-            is ContentToken.Chapter -> TYPE_CHAPTER
-            is ContentToken.BlankLine -> TYPE_SPACER
-            is ContentToken.PageBreak -> TYPE_DIVIDER
-            is ContentToken.PixivImage -> TYPE_IMAGE
-            is ContentToken.UploadedImage -> TYPE_IMAGE
-            is ContentToken.Jump -> TYPE_JUMP
+        override fun getItemViewType(position: Int): Int = when (val item = items[position]) {
+            is ScrollItem.TextGroup -> TYPE_PARAGRAPH
+            is ScrollItem.Single -> when (item.token) {
+                is ContentToken.Paragraph -> TYPE_PARAGRAPH
+                is ContentToken.Chapter -> TYPE_CHAPTER
+                is ContentToken.BlankLine -> TYPE_SPACER
+                is ContentToken.PageBreak -> TYPE_DIVIDER
+                is ContentToken.PixivImage -> TYPE_IMAGE
+                is ContentToken.UploadedImage -> TYPE_IMAGE
+                is ContentToken.Jump -> TYPE_JUMP
+            }
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder = when (viewType) {
@@ -257,14 +296,17 @@ class NovelScrollReaderView(context: Context) : RecyclerView(context) {
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            when (val token = tokens[position]) {
-                is ContentToken.Paragraph -> (holder as ParagraphHolder).bind(token, style, searchHits)
-                is ContentToken.Chapter -> bindChapter(holder.itemView as AppCompatTextView, token, style)
-                is ContentToken.BlankLine -> Unit
-                is ContentToken.PageBreak -> Unit
-                is ContentToken.PixivImage -> (holder as ImageHolder).bind(token, style, imageResolver(token))
-                is ContentToken.UploadedImage -> (holder as ImageHolder).bind(token, style, imageResolver(token))
-                is ContentToken.Jump -> (holder as JumpHolder).bind(token, style)
+            when (val item = items[position]) {
+                is ScrollItem.TextGroup -> (holder as ParagraphHolder).bind(item, style, searchHits)
+                is ScrollItem.Single -> when (val token = item.token) {
+                    is ContentToken.Paragraph -> (holder as ParagraphHolder).bind(ScrollItem.TextGroup(listOf(token)), style, searchHits)
+                    is ContentToken.Chapter -> bindChapter(holder.itemView as AppCompatTextView, token, style)
+                    is ContentToken.BlankLine -> Unit
+                    is ContentToken.PageBreak -> Unit
+                    is ContentToken.PixivImage -> (holder as ImageHolder).bind(token, style, imageResolver(token))
+                    is ContentToken.UploadedImage -> (holder as ImageHolder).bind(token, style, imageResolver(token))
+                    is ContentToken.Jump -> (holder as JumpHolder).bind(token, style)
+                }
             }
         }
 
@@ -276,24 +318,24 @@ class NovelScrollReaderView(context: Context) : RecyclerView(context) {
     private class SimpleHolder(view: View) : ViewHolder(view)
 
     private inner class ParagraphHolder(val tv: AppCompatTextView) : ViewHolder(tv) {
-        private var boundSourceStart: Int = 0
+        private val segments = mutableListOf<TextSegment>()
 
         init {
             tv.customSelectionActionModeCallback = object : ActionMode.Callback {
                 override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
                     populateMenu(menu)
-                    notifyTvSelection(tv, boundSourceStart, onSelectionStarted)
+                    notifyTvSelection(tv, segments, onSelectionStarted)
                     return true
                 }
 
                 override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
                     populateMenu(menu)
-                    notifyTvSelection(tv, boundSourceStart, onSelectionChanged)
+                    notifyTvSelection(tv, segments, onSelectionChanged)
                     return true
                 }
 
                 override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
-                    notifyTvSelection(tv, boundSourceStart, onSelectionChanged)
+                    notifyTvSelection(tv, segments, onSelectionChanged)
                     onSelectionMenuAction?.invoke(item.itemId)
                     mode.finish()
                     return true
@@ -305,20 +347,29 @@ class NovelScrollReaderView(context: Context) : RecyclerView(context) {
             }
         }
 
-        fun bind(token: ContentToken.Paragraph, style: TypeStyle, hits: List<HighlightRange>) {
-            boundSourceStart = token.sourceStart
-            val spannable = SpannableString(token.text)
+        fun bind(item: ScrollItem.TextGroup, style: TypeStyle, hits: List<HighlightRange>) {
+            segments.clear()
+            val spannable = SpannableStringBuilder()
             val indent = style.firstLineIndentPx.toInt()
-            if (indent > 0 && token.text.isNotEmpty()) {
-                spannable.setSpan(
-                    LeadingMarginSpan.Standard(indent, 0),
-                    0, token.text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                )
+            item.paragraphs.forEachIndexed { index, token ->
+                if (index > 0) {
+                    spannable.append("\n\n")
+                }
+                val localStart = spannable.length
+                spannable.append(token.text)
+                val localEnd = spannable.length
+                segments += TextSegment(localStart, localEnd, token.textSourceStart)
+                if (indent > 0 && token.text.isNotEmpty()) {
+                    spannable.setSpan(
+                        LeadingMarginSpan.Standard(indent, 0),
+                        localStart, localEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                    )
+                }
+                applyInlineSpans(spannable, token.inlineSpans, style, localStart)
             }
-            applyInlineSpans(spannable, token.inlineSpans, style)
             // LinkMovementMethod must be set BEFORE setTextIsSelectable,
             // otherwise ArrowKeyMovementMethod overwrites it.
-            tv.movementMethod = if (token.inlineSpans.any { it.tag is InlineTag.Link }) {
+            tv.movementMethod = if (item.paragraphs.any { p -> p.inlineSpans.any { it.tag is InlineTag.Link } }) {
                 android.text.method.LinkMovementMethod.getInstance()
             } else {
                 null
@@ -333,17 +384,19 @@ class NovelScrollReaderView(context: Context) : RecyclerView(context) {
             spannable.getSpans(0, spannable.length, ScrollSearchSpan::class.java)
                 .forEach { spannable.removeSpan(it) }
             if (hits.isEmpty()) return
-            val anchorStart = boundSourceStart
-            val anchorEnd = anchorStart + spannable.length
             for (hit in hits) {
-                val s = maxOf(hit.absoluteStart, anchorStart)
-                val e = minOf(hit.absoluteEnd, anchorEnd)
-                if (e <= s) continue
-                spannable.setSpan(
-                    ScrollSearchSpan(hit.color),
-                    s - anchorStart, e - anchorStart,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                )
+                for (segment in segments) {
+                    val anchorEnd = segment.absoluteStart + (segment.localEnd - segment.localStart)
+                    val s = maxOf(hit.absoluteStart, segment.absoluteStart)
+                    val e = minOf(hit.absoluteEnd, anchorEnd)
+                    if (e <= s) continue
+                    spannable.setSpan(
+                        ScrollSearchSpan(hit.color),
+                        segment.localStart + (s - segment.absoluteStart),
+                        segment.localStart + (e - segment.absoluteStart),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                    )
+                }
             }
         }
 
@@ -392,7 +445,7 @@ class NovelScrollReaderView(context: Context) : RecyclerView(context) {
     }
 
     private fun buildParagraphView(style: TypeStyle): AppCompatTextView =
-        AppCompatTextView(context).apply {
+        SelectableScrollTextView(context).apply {
             TextMeasurer.applyLayoutSettings(this)
             setTextSize(TypedValue.COMPLEX_UNIT_PX, style.textPaint.textSize)
             typeface = style.textPaint.typeface
@@ -549,26 +602,44 @@ class NovelScrollReaderView(context: Context) : RecyclerView(context) {
 
     private fun notifyTvSelection(
         tv: AppCompatTextView,
-        sourceStart: Int,
+        segments: List<TextSegment>,
         cb: ((Int, Int, String) -> Unit)?,
     ) {
         if (cb == null) return
         val s = tv.selectionStart.coerceAtLeast(0)
         val e = tv.selectionEnd.coerceAtLeast(s)
         if (e <= s || e > tv.text.length) return
+        val absStart = localToAbsolute(segments, s)
+        val absEnd = localToAbsolute(segments, e)
         val sliced = tv.text.subSequence(s, e).toString()
-        cb(sourceStart + s, sourceStart + e, sliced)
+        cb(absStart, absEnd.coerceAtLeast(absStart), sliced)
+    }
+
+    private fun localToAbsolute(segments: List<TextSegment>, localOffset: Int): Int {
+        if (segments.isEmpty()) return 0
+        for (segment in segments) {
+            if (localOffset <= segment.localEnd) {
+                val clamped = localOffset.coerceAtLeast(segment.localStart)
+                return segment.absoluteStart + (clamped - segment.localStart)
+            }
+        }
+        val last = segments.last()
+        return last.absoluteStart + (last.localEnd - last.localStart)
     }
 
     // ---- Inline markup spans ------------------------------------------------
 
     private fun applyInlineSpans(
-        spannable: SpannableString,
+        spannable: Spannable,
         inlineSpans: List<InlineSpan>,
         style: TypeStyle,
+        offset: Int = 0,
     ) {
         for (span in inlineSpans) {
             if (span.start < 0 || span.end > spannable.length || span.start >= span.end) continue
+            val start = offset + span.start
+            val end = offset + span.end
+            if (start < 0 || end > spannable.length || start >= end) continue
             when (val tag = span.tag) {
                 is InlineTag.Link -> {
                     val linkColor = style.linkColor
@@ -590,7 +661,7 @@ class NovelScrollReaderView(context: Context) : RecyclerView(context) {
                                 ds.isUnderlineText = true
                             }
                         },
-                        span.start, span.end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                        start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
                     )
                 }
                 is InlineTag.Ruby -> {
@@ -604,6 +675,66 @@ class NovelScrollReaderView(context: Context) : RecyclerView(context) {
 
     private class ScrollSearchSpan(color: Int) : BackgroundColorSpan(color)
 
+    private sealed class ScrollItem {
+        abstract val sourceStart: Int
+        abstract val sourceEnd: Int
+
+        data class TextGroup(val paragraphs: List<ContentToken.Paragraph>) : ScrollItem() {
+            override val sourceStart: Int = paragraphs.firstOrNull()?.sourceStart ?: 0
+            override val sourceEnd: Int = paragraphs.lastOrNull()?.sourceEnd ?: sourceStart
+        }
+
+        data class Single(val token: ContentToken) : ScrollItem() {
+            override val sourceStart: Int = token.sourceStart
+            override val sourceEnd: Int = token.sourceEnd
+        }
+    }
+
+    private data class TextSegment(val localStart: Int, val localEnd: Int, val absoluteStart: Int)
+
+    private class SelectableScrollTextView(context: Context) : AppCompatTextView(context) {
+        private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+        private var downX = 0f
+        private var downY = 0f
+        private var disallowInterceptPosted = false
+        private val disallowInterceptRunnable = Runnable {
+            parent?.requestDisallowInterceptTouchEvent(true)
+            disallowInterceptPosted = false
+        }
+
+        override fun onTouchEvent(event: MotionEvent): Boolean {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.x
+                    downY = event.y
+                    disallowInterceptPosted = true
+                    postDelayed(disallowInterceptRunnable, ViewConfiguration.getLongPressTimeout().toLong())
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.x - downX
+                    val dy = event.y - downY
+                    if (disallowInterceptPosted && kotlin.math.hypot(dx, dy) > touchSlop) {
+                        removeCallbacks(disallowInterceptRunnable)
+                        disallowInterceptPosted = false
+                    }
+                    if (selectionStart != selectionEnd) {
+                        parent?.requestDisallowInterceptTouchEvent(true)
+                    }
+                }
+                MotionEvent.ACTION_UP,
+                MotionEvent.ACTION_CANCEL,
+                -> {
+                    removeCallbacks(disallowInterceptRunnable)
+                    disallowInterceptPosted = false
+                    if (selectionStart == selectionEnd) {
+                        parent?.requestDisallowInterceptTouchEvent(false)
+                    }
+                }
+            }
+            return super.onTouchEvent(event)
+        }
+    }
+
     private companion object {
         /** Above this gap (in items) a chapter jump teleports instead of
          *  animating — keeps far jumps O(1) rather than item-by-item. */
@@ -615,5 +746,8 @@ class NovelScrollReaderView(context: Context) : RecyclerView(context) {
         const val TYPE_DIVIDER = 3
         const val TYPE_IMAGE = 4
         const val TYPE_JUMP = 5
+
+        const val MAX_TEXT_GROUP_PARAGRAPHS = 32
+        const val MAX_TEXT_GROUP_CHARS = 12000
     }
 }
