@@ -32,9 +32,6 @@ import ceui.pixiv.ui.common.saveImageToGallery
 import ceui.pixiv.ui.translate.MangaOcrModel
 import ceui.pixiv.ui.works.ToggleToolnarViewModel
 import ceui.pixiv.utils.setOnClick
-import ceui.loxia.ObjectPool
-import ceui.loxia.fetchFullIllustDetail
-import ceui.loxia.isFullDetail
 import com.github.panpf.sketch.loadImage
 import com.github.panpf.zoomimage.util.OffsetCompat
 import com.github.panpf.zoomimage.util.TransformCompat
@@ -64,12 +61,10 @@ class FragmentImageDetail : BaseFragment<FragmentImageDetailBinding?>() {
     private var largeDisposable: Disposable? = null
     // 原图是否已显示（网络成功 / 本地直读）。large 占位仅在其为 false 时才铺，兜住 large/原图竞态。
     private var originalShown: Boolean = false
-    private var fullIllustOverride: IllustsBean? = null
-    private var triedFetchFullIllust: Boolean = false
     // 不再放进 arguments / savedInstanceState，避免每个 Fragment 重复持久化 80KB IllustsBean
     // 导致 TransactionTooLargeException。统一向 ImageDetailActivity 取。
     private val mIllustsBean: IllustsBean?
-        get() = fullIllustOverride ?: (activity as? ImageDetailActivity)?.mIllustsBean
+        get() = (activity as? ImageDetailActivity)?.mIllustsBean
 
     private var pendingViewportRestore: PendingViewportRestore? = null
     private data class PendingViewportRestore(
@@ -482,23 +477,6 @@ class FragmentImageDetail : BaseFragment<FragmentImageDetailBinding?>() {
         largeDisposable?.dispose()
         largeDisposable = null
         val isUrlMode = mIllustsBean == null && !TextUtils.isEmpty(url)
-        val currentIllust = mIllustsBean
-        if (!isUrlMode && currentIllust != null && !currentIllust.isGif() && !currentIllust.isFullDetail()) {
-            if (!triedFetchFullIllust) {
-                triedFetchFullIllust = true
-                baseBind.progressCircular.visibility = View.VISIBLE
-                viewLifecycleOwner.lifecycleScope.launch {
-                    fullIllustOverride = resolveFullIllust(currentIllust)
-                    loadImage()
-                }
-                return
-            }
-            Timber.w(
-                "[ImageDetail] full illust unavailable, fall back to existing urls illust=%d page=%d",
-                currentIllust.id,
-                index
-            )
-        }
         val imageUrl: String? = if (isUrlMode) {
             url
         } else {
@@ -545,14 +523,6 @@ class FragmentImageDetail : BaseFragment<FragmentImageDetailBinding?>() {
         loadFromNetwork(imageUrl, isUrlMode)
     }
 
-    private suspend fun resolveFullIllust(illust: IllustsBean): IllustsBean? {
-        val cached = ObjectPool.get<IllustsBean>(illust.id.toLong()).value
-        if (cached?.isFullDetail() == true) {
-            return cached
-        }
-        return fetchFullIllustDetail(illust.id.toLong())
-    }
-
     /**
      * 原图下好前，先把一级详情页 B 已加载的 large 秒铺到底图 —— large 的字节已在 Glide 磁盘缓存里，
      * 经 [ImageLoaderV3]（= Glide asFile）取回时命中缓存即回，不额外走一次网络。原图
@@ -592,7 +562,6 @@ class FragmentImageDetail : BaseFragment<FragmentImageDetailBinding?>() {
         originalShown = true
         largeDisposable?.dispose()
         baseBind.progressCircular.visibility = View.GONE
-        baseBind.image.setImageDrawable(null)
         baseBind.image.loadImage(localUri) {
             addListener(onError = { _, _ ->
                     pendingViewportRestore = null
@@ -636,7 +605,6 @@ class FragmentImageDetail : BaseFragment<FragmentImageDetailBinding?>() {
                     largeDisposable?.dispose()
                     val file = state.file
                     Timber.d("[ImageDetail] result callback. file=${file.absolutePath}, size=${file.length()}, url=$shortUrl")
-                    baseBind.image.setImageDrawable(null)
                     baseBind.image.loadImage(file) {
                         addListener(onError = { _, _ ->
                                 pendingViewportRestore = null
