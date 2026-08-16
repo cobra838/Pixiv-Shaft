@@ -1,11 +1,12 @@
 package ceui.lisa.fragments;
 
+import com.scwang.smart.refresh.layout.SmartRefreshLayout;
 
 
 import ceui.lisa.R;
 import ceui.lisa.databinding.FragmentDonateBinding;
 
-public class FragmentDonate extends BaseLazyFragment<FragmentDonateBinding> {
+public class FragmentDonate extends SwipeFragment<FragmentDonateBinding> {
 
     public static FragmentDonate newInstance() {
         return new FragmentDonate();
@@ -21,4 +22,8 @@ public class FragmentDonate extends BaseLazyFragment<FragmentDonateBinding> {
         baseBind.toolbar.setNavigationOnClickListener(v -> finish());
     }
 
+    @Override
+    public SmartRefreshLayout getSmartRefreshLayout() {
+        return baseBind.refreshLayout;
+    }
 }

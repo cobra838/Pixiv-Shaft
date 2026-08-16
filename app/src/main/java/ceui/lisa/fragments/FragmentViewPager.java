@@ -54,7 +54,8 @@ public class FragmentViewPager extends BaseFragment<ViewpagerWithTablayoutBindin
     private String title;
     /**
      * 两个分支现在都是 feeds 的 {@link FeedFragment}（屏蔽记录三 tab 已迁 feeds、R18 榜本就是），
-     * 故按共同基类 {@link Fragment} 存。
+     * 故按共同基类 {@link Fragment} 存。{@link #forceRefresh()} 里对 {@link ListFragment} 的
+     * 分支已无实际命中，留作防御（万一以后又塞回 legacy 页）。
      */
     private Fragment[] mFragments = null;
 
@@ -192,7 +193,9 @@ public class FragmentViewPager extends BaseFragment<ViewpagerWithTablayoutBindin
     public void forceRefresh() {
         try {
             Fragment current = mFragments[baseBind.viewPager.getCurrentItem()];
-            if (current instanceof FeedFragment) {
+            if (current instanceof ListFragment) {
+                ((ListFragment<?, ?>) current).forceRefresh();
+            } else if (current instanceof FeedFragment) {
                 ((FeedFragment) current).forceRefresh();
             }
         } catch (Exception e) {
@@ -214,6 +217,8 @@ public class FragmentViewPager extends BaseFragment<ViewpagerWithTablayoutBindin
         for (Fragment fragment : mFragments) {
             if (fragment instanceof FeedFragment) {
                 ((FeedFragment) fragment).forceRefresh();
+            } else if (fragment instanceof ListFragment) {
+                ((ListFragment<?, ?>) fragment).forceRefresh();
             }
         }
     }

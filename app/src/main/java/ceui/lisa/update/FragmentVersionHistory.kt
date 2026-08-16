@@ -4,12 +4,13 @@ import android.view.View
 import androidx.recyclerview.widget.LinearLayoutManager
 import ceui.lisa.R
 import ceui.lisa.databinding.FragmentVersionHistoryBinding
-import ceui.lisa.fragments.BaseLazyFragment
+import ceui.lisa.fragments.SwipeFragment
+import com.scwang.smart.refresh.layout.SmartRefreshLayout
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.Disposable
 import io.reactivex.schedulers.Schedulers
 
-class FragmentVersionHistory : BaseLazyFragment<FragmentVersionHistoryBinding>() {
+class FragmentVersionHistory : SwipeFragment<FragmentVersionHistoryBinding>() {
 
     private var disposable: Disposable? = null
 
@@ -17,6 +18,9 @@ class FragmentVersionHistory : BaseLazyFragment<FragmentVersionHistoryBinding>()
         mLayoutID = R.layout.fragment_version_history
     }
 
+    override fun getSmartRefreshLayout(): SmartRefreshLayout {
+        return baseBind.refreshLayout
+    }
 
     override fun initData() {
         baseBind.toolbar.setNavigationOnClickListener { mActivity.finish() }

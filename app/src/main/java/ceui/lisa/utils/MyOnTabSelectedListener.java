@@ -3,6 +3,7 @@ package ceui.lisa.utils;
 import com.google.android.material.tabs.TabLayout;
 
 import androidx.fragment.app.Fragment;
+import ceui.lisa.fragments.ListFragment;
 import ceui.pixiv.feeds.FeedFragment;
 
 public class MyOnTabSelectedListener implements TabLayout.OnTabSelectedListener {
@@ -28,7 +29,9 @@ public class MyOnTabSelectedListener implements TabLayout.OnTabSelectedListener 
         int position = tab.getPosition();
         if(position < this.fragments.length){
             Fragment fragment = this.fragments[position];
-            if (fragment instanceof FeedFragment) {
+            if (fragment instanceof ListFragment) {
+                ((ListFragment) fragment).scrollToTop();
+            } else if (fragment instanceof FeedFragment) {
                 ((FeedFragment) fragment).scrollToTop();
             }
         }

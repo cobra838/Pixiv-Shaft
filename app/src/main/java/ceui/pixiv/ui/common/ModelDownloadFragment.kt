@@ -6,15 +6,16 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import ceui.lisa.R
 import ceui.lisa.databinding.FragmentRembgModelDownloadBinding
-import ceui.lisa.fragments.BaseLazyFragment
 import ceui.lisa.utils.Common
+import ceui.lisa.fragments.SwipeFragment
 import ceui.pixiv.utils.setOnClick
 import com.qmuiteam.qmui.widget.dialog.QMUIDialog
 import com.qmuiteam.qmui.widget.dialog.QMUIDialogAction
+import com.scwang.smart.refresh.layout.SmartRefreshLayout
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-abstract class ModelDownloadFragment : BaseLazyFragment<FragmentRembgModelDownloadBinding>() {
+abstract class ModelDownloadFragment : SwipeFragment<FragmentRembgModelDownloadBinding>() {
 
     private var downloadJob: Job? = null
     private var downloadStartTime = 0L
@@ -41,8 +42,11 @@ abstract class ModelDownloadFragment : BaseLazyFragment<FragmentRembgModelDownlo
         mLayoutID = R.layout.fragment_rembg_model_download
     }
 
+    override fun getSmartRefreshLayout(): SmartRefreshLayout = baseBind.refreshLayout
 
+    override fun enableRefresh(): Boolean = false
 
+    override fun enableLoadMore(): Boolean = false
 
     override fun initData() {
         baseBind.toolbar.toolbarTitle.text = getString(titleRes())

@@ -19,9 +19,10 @@ import ceui.lisa.utils.Params
 import ceui.lisa.utils.V3Palette
 import com.qmuiteam.qmui.skin.QMUISkinManager
 import com.qmuiteam.qmui.widget.dialog.QMUIDialog.MenuDialogBuilder
+import com.scwang.smart.refresh.layout.SmartRefreshLayout
 import io.reactivex.disposables.Disposable
 
-class FragmentAboutApp : BaseLazyFragment<FragmentAboutBinding>() {
+class FragmentAboutApp : SwipeFragment<FragmentAboutBinding>() {
 
     private var updateDisposable: Disposable? = null
 
@@ -29,6 +30,9 @@ class FragmentAboutApp : BaseLazyFragment<FragmentAboutBinding>() {
         mLayoutID = R.layout.fragment_about
     }
 
+    override fun getSmartRefreshLayout(): SmartRefreshLayout {
+        return baseBind.refreshLayout
+    }
 
     override fun initData() {
         baseBind.toolbar.setNavigationOnClickListener { mActivity.finish() }

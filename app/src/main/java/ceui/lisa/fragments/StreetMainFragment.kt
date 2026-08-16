@@ -42,11 +42,9 @@ import ceui.loxia.StreetThumbnail
 import ceui.loxia.StreetTrendTag
 import ceui.pixiv.session.SessionManager
 import ceui.pixiv.utils.ppppx
-import ceui.pixiv.widgets.LoadMoreScrollListener
-import ceui.pixiv.widgets.applyV3RefreshTheme
-import ceui.pixiv.widgets.scrollUpFrom
 import com.bumptech.glide.Glide
 import com.hjq.toast.Toaster
+import com.scwang.smart.refresh.layout.SmartRefreshLayout
 import com.tencent.mmkv.MMKV
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -131,7 +129,7 @@ private const val RAIL_CELL_SIZE_DP = 120
 /** pixiv 对「评论本体是表情/贴纸」的 pickup 回的占位串，没有可读文本。 */
 private const val PICKUP_STAMP_PLACEHOLDER = "(normal)"
 
-class StreetMainFragment : BaseLazyFragment<FragmentBaseListBinding>() {
+class StreetMainFragment : SwipeFragment<FragmentBaseListBinding>() {
 
     private val viewModel: StreetMainViewModel by viewModels()
     private val adapter = StreetAdapter()
@@ -152,16 +150,8 @@ class StreetMainFragment : BaseLazyFragment<FragmentBaseListBinding>() {
         baseBind.recyclerView.setPadding(LIST_EDGE_DP.ppppx, 0, LIST_EDGE_DP.ppppx, 0)
         baseBind.recyclerView.clipToPadding = false
 
-        baseBind.refreshLayout.applyV3RefreshTheme()
-        // 列表隔着 listContainer 挂在刷新层下,顶部判定得自己接到 RecyclerView 上,
-        // 否则滚到中段往下拖也会被当成「已在顶部」触发刷新。
-        baseBind.refreshLayout.scrollUpFrom(baseBind.recyclerView)
         baseBind.refreshLayout.setOnRefreshListener { viewModel.refresh() }
-        // 翻页改由滚动触发(SwipeRefreshLayout 没有上拉 footer)。到底了就别再喂请求;
-        // 重入由 StreetMainViewModel.load 的 Loading 守卫兜住。
-        baseBind.recyclerView.addOnScrollListener(
-            LoadMoreScrollListener({ if (viewModel.hasMore) viewModel.loadMore() })
-        )
+        baseBind.refreshLayout.setOnLoadMoreListener { viewModel.loadMore() }
 
         viewModel.loadState.observe(viewLifecycleOwner) { state ->
             when (state) {
@@ -169,38 +159,31 @@ class StreetMainFragment : BaseLazyFragment<FragmentBaseListBinding>() {
                 // 首次进来直接白屏,用户看不出到底是在加载还是拉空了);已有内容则是翻页,
                 // 转圈落到列表尾部。
                 is StreetMainViewModel.LoadState.Loading -> {
-                    if (adapter.itemCount == 0) {
-                        // 首屏这一发可能早于刷新层完成布局,那时置 isRefreshing 是不显示的;
-                        // post 到布局后再置,并复查还在不在加载,免得请求已经回来了还留个空转的圈。
-                        baseBind.refreshLayout.post {
-                            if (viewModel.loadState.value == StreetMainViewModel.LoadState.Loading) {
-                                baseBind.refreshLayout.isRefreshing = true
-                            }
-                        }
-                    } else {
-                        adapter.syncFooter(true)
-                    }
+                    Unit
                 }
                 is StreetMainViewModel.LoadState.Refreshed -> {
-                    adapter.resetFooter(viewModel.hasMore)
                     adapter.notifyDataSetChanged()
-                    baseBind.refreshLayout.isRefreshing = false
+                    baseBind.refreshLayout.finishRefresh()
+                    baseBind.refreshLayout.setNoMoreData(!viewModel.hasMore)
                 }
                 is StreetMainViewModel.LoadState.LoadedMore -> {
                     // 先按数据的增量报,再单独校尾部那一条 —— 两件事混在一次 notify 里
                     // 会差出一条,RecyclerView 直接抛 Inconsistency。
                     adapter.notifyItemRangeInserted(state.insertStart, state.insertCount)
-                    adapter.syncFooter(viewModel.hasMore)
+                    baseBind.refreshLayout.finishLoadMore()
+                    baseBind.refreshLayout.setNoMoreData(!viewModel.hasMore)
                 }
                 is StreetMainViewModel.LoadState.Error -> {
-                    baseBind.refreshLayout.isRefreshing = false
-                    adapter.syncFooter(false)
+                    baseBind.refreshLayout.finishRefresh(false)
+                    baseBind.refreshLayout.finishLoadMore(false)
                     Toaster.showShort(state.message)
                 }
                 else -> Unit
             }
         }
     }
+
+    override fun getSmartRefreshLayout(): SmartRefreshLayout = baseBind.refreshLayout
 
     private var loginWebView: WebView? = null
 
@@ -241,7 +224,8 @@ class StreetMainFragment : BaseLazyFragment<FragmentBaseListBinding>() {
      * 「CSRF token 未就绪」反复弹一遍。给一条明确提示 + 重新登录的入口，别让用户空转。
      */
     private fun onCsrfUnavailable() {
-        baseBind.refreshLayout.isEnabled = false
+        baseBind.refreshLayout.setEnableRefresh(false)
+        baseBind.refreshLayout.setEnableLoadMore(false)
         Toaster.showShort(getString(R.string.street_csrf_failed))
         showWebLoginDialog()
     }
@@ -287,7 +271,8 @@ class StreetMainFragment : BaseLazyFragment<FragmentBaseListBinding>() {
         baseBind.toolbarTitle.text = getString(R.string.street_title)
         // CSRF 没就绪前下拉刷新必失败(refresh() 直接抛"token 未就绪"的 toast),先关掉手势,
         // cleanupWebView 里恢复。legacy 的 FalsifyHeader 本来就不触发刷新,这是对齐旧行为。
-        baseBind.refreshLayout.isEnabled = false
+        baseBind.refreshLayout.setEnableRefresh(false)
+        baseBind.refreshLayout.setEnableLoadMore(false)
 
         val webView = WebView(mContext).apply {
             visibility = View.GONE
@@ -335,7 +320,7 @@ class StreetMainFragment : BaseLazyFragment<FragmentBaseListBinding>() {
                 }
             }
         }
-        baseBind.listContainer.addView(webView)
+        baseBind.refreshLayout.addView(webView)
         webView.loadUrl("https://www.pixiv.net/")
     }
 
@@ -365,7 +350,8 @@ class StreetMainFragment : BaseLazyFragment<FragmentBaseListBinding>() {
         // 登录 WebView 盖满 listContainer 期间必须关掉下拉刷新:此时 scrollUpFrom 的唯一候选
         // recyclerView 是 GONE,canChildScrollUp 恒 false → 在登录页里往回滚(手指下滑)会被
         // SwipeRefreshLayout 拦截成刷新手势——既抢走 WebView 的滚动,又在登录中途乱发 refresh()。
-        baseBind.refreshLayout.isEnabled = false
+        baseBind.refreshLayout.setEnableRefresh(false)
+        baseBind.refreshLayout.setEnableLoadMore(false)
 
         val ua = ClientManager.WEB_USER_AGENT
         val webView = WebView(mContext).apply {
@@ -421,7 +407,7 @@ class StreetMainFragment : BaseLazyFragment<FragmentBaseListBinding>() {
             }
         }
 
-        baseBind.listContainer.addView(webView)
+        baseBind.refreshLayout.addView(webView)
         webView.loadUrl("https://accounts.pixiv.net/login")
     }
 
@@ -449,13 +435,14 @@ class StreetMainFragment : BaseLazyFragment<FragmentBaseListBinding>() {
 
     private fun cleanupWebView() {
         loginWebView?.let {
-            baseBind.listContainer.removeView(it)
+            baseBind.refreshLayout.removeView(it)
             it.destroy()
         }
         loginWebView = null
         baseBind.toolbarTitle.text = getString(R.string.street_title)
         baseBind.recyclerView.visibility = View.VISIBLE
-        baseBind.refreshLayout.isEnabled = true
+        baseBind.refreshLayout.setEnableRefresh(true)
+        baseBind.refreshLayout.setEnableLoadMore(true)
     }
 
     override fun onDestroyView() {
