@@ -106,6 +106,11 @@ public class SAFactory implements DownloadFileFactory {
         return mPlan.getSkip();
     }
 
+    @Nullable
+    public Uri existingUri() {
+        return mPlan.getBackend().existingUri(mPlan.getPath());
+    }
+
     /**
      * 该 bucket 解析后的覆盖策略是不是「已存在则跳过」。
      *
@@ -116,5 +121,9 @@ public class SAFactory implements DownloadFileFactory {
      */
     public boolean isSkipPolicy() {
         return mPlan.getOverwrite() == OverwritePolicy.Skip;
+    }
+
+    public boolean isReplacePolicy() {
+        return mPlan.getOverwrite() == OverwritePolicy.Replace;
     }
 }

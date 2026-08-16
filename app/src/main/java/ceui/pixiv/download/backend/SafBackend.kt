@@ -102,9 +102,7 @@ class SafBackend(
             try {
                 Timber.tag(TAG).d("replace: delete via cleaned uri %s", cleanedUri)
                 if (deleteDocument(context.contentResolver, cleanedUri)) {
-                    val fresh = parent.createFile(mime, relPath.filename)
-                        ?: error("DocumentFile.createFile returned null for $relPath under $treeUri")
-                    return handleFor(fresh, mime)
+                    return handleFor(createExactReplacement(parent, relPath, mime), mime)
                 }
             } catch (e: Exception) {
                 Timber.tag(TAG).e(e)
@@ -121,9 +119,7 @@ class SafBackend(
             try {
                 Timber.tag(TAG).d("replace: delete via direct doc id %s", targetFileUri)
                 if (deleteDocument(context.contentResolver, targetFileUri)) {
-                    val fresh = parent.createFile(mime, relPath.filename)
-                        ?: error("DocumentFile.createFile returned null for $relPath under $treeUri")
-                    return handleFor(fresh, mime)
+                    return handleFor(createExactReplacement(parent, relPath, mime), mime)
                 }
             } catch (e: Exception) {
                 Timber.tag(TAG).e(e)
@@ -134,13 +130,25 @@ class SafBackend(
         val existing = findExistingDocument(parent, relPath.filename)
         if (existing != null && existing.isFile) {
             if (!existing.delete()) {
-                Timber.tag(TAG).w("replace: stale file not deleted, provider will suffix: %s", existing.uri)
+                throw SecurityException("Cannot replace existing file: ${existing.uri}")
             }
         }
 
+        return handleFor(createExactReplacement(parent, relPath, mime), mime)
+    }
+
+    private fun createExactReplacement(
+        parent: DocumentFile,
+        relPath: RelativePath,
+        mime: String,
+    ): DocumentFile {
         val fresh = parent.createFile(mime, relPath.filename)
             ?: error("DocumentFile.createFile returned null for $relPath under $treeUri")
-        return handleFor(fresh, mime)
+        if (fresh.name != relPath.filename) {
+            runCatching { fresh.delete() }
+            error("SAF provider did not replace $relPath and returned ${fresh.name}")
+        }
+        return fresh
     }
 
     override fun open(relPath: RelativePath, mime: String): StorageBackend.WriteHandle {
@@ -273,6 +281,13 @@ class SafBackend(
     override fun exists(relPath: RelativePath): Boolean {
         val parent = findDirectory(relPath.directory) ?: return false
         return parent.findFile(relPath.filename)?.exists() == true
+    }
+
+    override fun existingUri(relPath: RelativePath): Uri? {
+        val parent = findDirectory(relPath.directory) ?: return null
+        return parent.findFile(relPath.filename)
+            ?.takeIf { it.isFile && it.exists() }
+            ?.uri
     }
 
     override fun delete(relPath: RelativePath): Boolean {

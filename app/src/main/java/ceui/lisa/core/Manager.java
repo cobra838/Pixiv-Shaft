@@ -609,8 +609,60 @@ public class Manager {
                 }
             }
 
+            if (!shouldSkip && !downloadItem.getIllust().isGif()) {
+                boolean replacePolicy =
+                        (factory instanceof Android10DownloadFactory22 && ((Android10DownloadFactory22) factory).isReplacePolicy())
+                     || (factory instanceof SAFactory && ((SAFactory) factory).isReplacePolicy());
+                Uri existingUri = null;
+                if (replacePolicy) {
+                    if (factory instanceof Android10DownloadFactory22) {
+                        existingUri = ((Android10DownloadFactory22) factory).existingUri();
+                    } else if (factory instanceof SAFactory) {
+                        existingUri = ((SAFactory) factory).existingUri();
+                    }
+                }
+                if (existingUri != null) {
+                    existingUri = RecordedPageProbe.usableUri(context, existingUri.toString());
+                }
+                if (existingUri != null && !RecordedPageProbe.hasUsableRecord(
+                        context,
+                        downloadItem.getIllust().getId(),
+                        downloadItem.getIndex())) {
+                    shouldSkip = true;
+                    Common.showLog("[DL] indexed unmanaged existing file, illust="
+                            + downloadItem.getIllust().getId() + " page=" + downloadItem.getIndex());
+                }
+            }
+
             if (shouldSkip) {
                 Common.showLog("[DL] skip download (already exists), illust=" + downloadItem.getIllust().getId());
+                if (!downloadItem.getIllust().isGif()) {
+                    Uri existingUri = null;
+                    if (factory instanceof Android10DownloadFactory22) {
+                        existingUri = ((Android10DownloadFactory22) factory).existingUri();
+                    } else if (factory instanceof SAFactory) {
+                        existingUri = ((SAFactory) factory).existingUri();
+                    }
+                    if (existingUri != null) {
+                        existingUri = RecordedPageProbe.usableUri(context, existingUri.toString());
+                    }
+                    if (existingUri != null) {
+                        try {
+                            DownloadEntity entity = new DownloadEntity();
+                            entity.setIllustGson(Shaft.sGson.toJson(downloadItem.getIllust()));
+                            entity.setFileName(downloadItem.getName());
+                            entity.setDownloadTime(System.currentTimeMillis());
+                            entity.setFilePath(existingUri.toString());
+                            entity.setIllustId(downloadItem.getIllust().getId());
+                            entity.setPage(downloadItem.getIndex());
+                            AppDatabase.getAppDatabase(Shaft.getContext()).downloadDao().insertDownload(entity);
+                            ManagerReactive.pokeDoneTable();
+                            Common.showLog("[DL-CACHE] indexed existing file=" + existingUri);
+                        } catch (Throwable t) {
+                            Common.showLog("[DL] existing-file index failed: " + t);
+                        }
+                    }
+                }
                 complete(downloadItem, true);
                 AndroidSchedulers.mainThread().scheduleDirect(() -> {
                     synchronized (Manager.this) {

@@ -40,6 +40,9 @@ interface StorageBackend {
 
     fun exists(relPath: RelativePath): Boolean
 
+    /** Returns the URI of the canonical existing file, if this backend can resolve it. */
+    fun existingUri(relPath: RelativePath): Uri? = null
+
     /**
      * SAF模式下会重写本函数，见[ceui.pixiv.download.backend.SafBackend.skipIfExists]
      */

@@ -107,6 +107,8 @@ class Android10DownloadFactory22(
     /** Exposed so callers who want to short-circuit can check skip state. */
     fun isSkip(): Boolean = plan?.skip ?: false
 
+    fun existingUri(): Uri? = plan?.backend?.existingUri(plan.path)
+
     /**
      * 该 bucket 解析后的覆盖策略是不是「已存在则跳过」。
      *
@@ -116,4 +118,6 @@ class Android10DownloadFactory22(
      * Rename 是用户明确要新文件、Replace 本来就要覆写，都不该被记录短路。
      */
     fun isSkipPolicy(): Boolean = plan?.overwrite == OverwritePolicy.Skip
+
+    fun isReplacePolicy(): Boolean = plan?.overwrite == OverwritePolicy.Replace
 }

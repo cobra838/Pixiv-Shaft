@@ -86,6 +86,18 @@ class MediaStoreBackend(
         return legacyFile(relPath).exists()
     }
 
+    override fun existingUri(relPath: RelativePath): Uri? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val uri = findUri(relPath) ?: reclaimOrphanRow(relPath) ?: return null
+            return when {
+                legacyFile(relPath).exists() -> uri
+                probeFileBehindRow(uri) == ProbeResult.Present -> uri
+                else -> null
+            }
+        }
+        return legacyFile(relPath).takeIf { it.exists() }?.let(Uri::fromFile)
+    }
+
     private enum class ProbeResult { Present, Missing, Unknown }
 
     /**
@@ -146,6 +158,8 @@ class MediaStoreBackend(
                 try {
                     return openExistingForReplace(existing, relPath, mime)
                 } catch (se: SecurityException) {
+                    throw SecurityException("Cannot replace existing file: $existing", se)
+                    /*
                     // Row exists but we don't own it; cannot in-place update.
                     // Log + fall through to fresh insert below. MediaStore on
                     // Q+ auto-resolves DISPLAY_NAME conflicts within the same
@@ -157,6 +171,7 @@ class MediaStoreBackend(
                             "(reinstall or external scanner). Falling back to insert.",
                         se,
                     )
+                    */
                 }
             }
             // Reach here under two distinct conditions:
@@ -263,6 +278,13 @@ class MediaStoreBackend(
             }
         }
         var target: Uri = insertPendingRow(collectionUri, values, silent, relPath)
+        val actualName = queryDisplayName(target)
+        if (actualName != null && actualName != relPath.filename) {
+            runCatching { context.contentResolver.delete(target, null, null) }
+            throw IllegalStateException(
+                "MediaStore did not use requested filename ${relPath.filename}: $actualName"
+            )
+        }
         // 登记在途写入:低调下载把 DATE_ADDED 回拨后,MediaStoreOrphanCleaner 的
         // 60 秒时间闸认不出这是刚插入的行,必须显式登记防止被当孤儿清掉。
         // 下面所有提前退出路径(rename guard / openOutputStream 失败)都要 untrack。
@@ -495,6 +517,17 @@ class MediaStoreBackend(
             if (c.moveToFirst()) {
                 val idx = c.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
                 if (idx >= 0) return c.getString(idx)
+            }
+        }
+        return null
+    }
+
+    private fun queryDisplayName(uri: Uri): String? {
+        val projection = arrayOf(MediaStore.MediaColumns.DISPLAY_NAME)
+        context.contentResolver.query(uri, projection, null, null, null)?.use { c ->
+            if (c.moveToFirst()) {
+                val index = c.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+                if (index >= 0) return c.getString(index)
             }
         }
         return null

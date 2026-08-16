@@ -43,6 +43,9 @@ class AppCacheBackend(private val context: Context) : StorageBackend {
 
     override fun exists(relPath: RelativePath): Boolean = toFile(relPath).exists()
 
+    override fun existingUri(relPath: RelativePath): Uri? =
+        toFile(relPath).takeIf { it.exists() }?.let(Uri::fromFile)
+
     override fun delete(relPath: RelativePath): Boolean = toFile(relPath).delete()
 
     private fun toFile(relPath: RelativePath): File {
