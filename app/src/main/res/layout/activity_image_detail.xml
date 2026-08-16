@@ -6,8 +6,7 @@
 
     </data>
 
-    <!-- 根布局 = 竖向拖拽关闭手势层;黑底画在它身上,透明窗口下由转场/拖拽驱动其 alpha -->
-    <ceui.lisa.view.DragDismissLayout
+    <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="@color/black">
@@ -86,5 +85,5 @@
 
         </FrameLayout>
 
-    </ceui.lisa.view.DragDismissLayout>
+    </RelativeLayout>
 </layout>
