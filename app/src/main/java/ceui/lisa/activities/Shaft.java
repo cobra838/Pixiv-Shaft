@@ -42,8 +42,6 @@ import me.jessyan.progressmanager.ProgressManager;
 import okhttp3.OkHttpClient;
 import timber.log.Timber;
 
-import static ceui.lisa.utils.Local.LOCAL_DATA;
-
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -261,7 +259,7 @@ public class Shaft extends Application implements ServicesProvider {
         sGson = new Gson();
         //0.0127254
 
-        sPreferences = getSharedPreferences(LOCAL_DATA, Context.MODE_PRIVATE);
+        sPreferences = getSharedPreferences(Local.LOCAL_DATA, Context.MODE_PRIVATE);
 
         Timber.plant(new Timber.DebugTree());
 
